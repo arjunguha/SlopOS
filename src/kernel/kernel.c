@@ -82,6 +82,13 @@ static int scheme_disk_size(void *user) {
     return (int)ramdisk_size;
 }
 
+static unsigned int read_u32_le(const unsigned char *p) {
+    return (unsigned int)p[0] |
+           ((unsigned int)p[1] << 8) |
+           ((unsigned int)p[2] << 16) |
+           ((unsigned int)p[3] << 24);
+}
+
 typedef struct SchemeThreadCtx {
     Scheme sc;
     Cell heap[2048];
@@ -193,30 +200,16 @@ void kmain(void) {
 
     scheme_init(&sc, &cfg);
     console_write(scheme_msg);
-    scheme_eval_string(&sc,
-        "(begin "
-        "  (define (u8 off) (disk-read-byte off)) "
-        "  (define (u32 off) (+ (u8 off) (* 256 (u8 (+ off 1))) "
-        "                          (* 65536 (u8 (+ off 2))) (* 16777216 (u8 (+ off 3))))) "
-        "  (define (cadr x) (car (cdr x))) "
-        "  (define (list a b) (cons a (cons b '()))) "
-        "  (define dir-off (u32 12)) "
-        "  (define dir-len (u32 16)) "
-        "  (define dir-limit (+ dir-off dir-len)) "
-        "  (define (find-file-loop name off) "
-        "    (if (< off dir-limit) "
-        "        (if (string=? (disk-read-cstring off 64) name) "
-        "            (list (u32 (+ off 64)) (u32 (+ off 68))) "
-        "            (find-file-loop name (+ off 76))) "
-        "        #f)) "
-        "  (define (find-file name) (find-file-loop name dir-off)) "
-        "  (define (load name) "
-        "    (begin "
-        "      (define info (find-file name)) "
-        "      (if info "
-        "          (eval-string (disk-read-bytes (car info) (cadr info))) "
-        "          (begin (display \"missing file: \") (display name) (newline))))) "
-        "  (load \"init.scm\"))");
+    static char boot_buf[4096];
+    unsigned int boot_len = read_u32_le(ramdisk_base);
+    if (boot_len >= sizeof(boot_buf)) {
+        scheme_panic("boot.scm too large");
+    }
+    for (unsigned int i = 0; i < boot_len; i++) {
+        boot_buf[i] = (char)ramdisk_base[8 + i];
+    }
+    boot_buf[boot_len] = '\0';
+    scheme_eval_string(&sc, boot_buf);
 
     while (thread_active_count() > 0) {
         thread_yield();

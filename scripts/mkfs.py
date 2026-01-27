@@ -65,14 +65,16 @@ def main():
 
     struct.pack_into("<II", img, 0, boot_len, fs_offset)
     img[BOOT_HEADER_SIZE:BOOT_HEADER_SIZE + boot_len] = boot_data
-    struct.pack_into("<8sIIII", img, fs_offset, MAGIC, VERSION, dir_offset - fs_offset, dir_length, data_offset - fs_offset)
+    dir_offset_rel = dir_offset - fs_offset
+    data_offset_rel = data_offset - fs_offset
+    struct.pack_into("<8sIIII", img, fs_offset, MAGIC, VERSION, dir_offset_rel, dir_length, data_offset_rel)
 
     dir_pos = dir_offset
     for name, data_off, data_len, _ in file_entries:
         name_bytes = name.encode("ascii")
         name_field = name_bytes + b"\0" * (ENTRY_NAME_LEN - len(name_bytes))
         img[dir_pos:dir_pos + ENTRY_NAME_LEN] = name_field
-        struct.pack_into("<III", img, dir_pos + ENTRY_NAME_LEN, data_off, data_len, 0)
+        struct.pack_into("<III", img, dir_pos + ENTRY_NAME_LEN, data_off - fs_offset, data_len, 0)
         dir_pos += ENTRY_SIZE
 
     for _, data_off, _, data in file_entries:

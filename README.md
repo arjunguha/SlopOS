@@ -39,7 +39,7 @@ This produces:
 - `build/stage1.bin` (512-byte boot sector)
 - `build/stage2.bin` (second-stage loader)
 - `build/kernel.bin` (freestanding 32-bit kernel image)
-- `build/fs.img` (flat filesystem image with Scheme programs)
+- `build/fs.img` (boot script + flat filesystem image with Scheme programs)
 - `build/os.img` (1.44MB floppy image with both stages + kernel)
 
 ## Run
@@ -70,13 +70,40 @@ QEMU powers off automatically after the output.
 
 ## Flat filesystem image
 
-The packer builds a tiny flat filesystem (no directories) from `programs/`:
+The packer builds a boot + filesystem image from `programs/`:
 
 ```bash
 python3 scripts/mkfs.py programs build/fs.img
 ```
 
-`init.scm` is loaded from this filesystem at boot.
+`boot.scm` is read from a fixed location at the start of the image. It defines
+filesystem helpers and then loads `init.scm` from the flat filesystem region.
+
+### Boot + filesystem image layout
+
+The `build/fs.img` format is:
+
+- Offset 0x0000: `boot_len` (uint32 LE)
+- Offset 0x0004: `fs_offset` (uint32 LE)
+- Offset 0x0008: `boot.scm` bytes (length = `boot_len`)
+- Offset `fs_offset`: superblock
+
+Superblock (512 bytes at `fs_offset`):
+- Magic: 8 bytes `SLOPFS1\0`
+- Version: uint32 LE
+- Dir offset (relative to `fs_offset`): uint32 LE
+- Dir length (bytes): uint32 LE
+- Data offset (relative to `fs_offset`): uint32 LE
+
+Directory entries (packed, 76 bytes each):
+- Name: 64 bytes ASCII, null-padded
+- File offset (relative to `fs_offset`): uint32 LE
+- File length (bytes): uint32 LE
+- Reserved: uint32 LE (currently 0)
+
+Notes:
+- Filename length is limited to 64 ASCII bytes (longer names are rejected by the packer).
+- `fs_offset` is aligned to 512 bytes; directory and data offsets are relative to `fs_offset`.
 
 ## Scheme interpreter (Linux)
 
