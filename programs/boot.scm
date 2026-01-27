@@ -33,7 +33,8 @@
                                   (cons (cons 'string=? string=?)
                                     (cons (cons 'list-alloc list-alloc)
                                       (cons (cons 'eval-string eval-string)
-                                        '())))))))))))))))))))
+                                        (cons (cons 'read-text-file read-text-file)
+                                          '()))))))))))))))))))))
 
   (define (find-file-loop name off)
     (if (< off dir-limit)
@@ -43,6 +44,13 @@
         #f))
 
   (define (find-file name) (find-file-loop name dir-off))
+
+  (define (read-text-file name)
+    (begin
+      (define info (find-file name))
+      (if info
+          (disk-read-bytes (car info) (cadr info))
+          #f)))
 
   (define (load name)
     (begin
