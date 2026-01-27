@@ -31,8 +31,9 @@
                               (cons (cons 'string-length string-length)
                                 (cons (cons 'string-ref string-ref)
                                   (cons (cons 'string=? string=?)
-                                    (cons (cons 'eval-string eval-string)
-                                      '()))))))))))))))))))
+                                    (cons (cons 'list-alloc list-alloc)
+                                      (cons (cons 'eval-string eval-string)
+                                        '())))))))))))))))))))
 
   (define (find-file-loop name off)
     (if (< off dir-limit)

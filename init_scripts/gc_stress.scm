@@ -1,0 +1,5 @@
+(define xs (list-alloc 1600))
+(set! xs '())
+(define ys (list-alloc 1600))
+(display "gc stress ok")
+(newline)

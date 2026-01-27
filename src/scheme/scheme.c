@@ -652,6 +652,26 @@ static Cell *prim_string_eq(Scheme *sc, Cell *args) {
     return scheme_true(sc);
 }
 
+static Cell *prim_list_alloc(Scheme *sc, Cell *args) {
+    Cell *ncell = car(args);
+    if (ncell->type != T_INT) {
+        panic(sc, "list-alloc: expected int");
+    }
+    int n = ncell->as.i;
+    if (n < 0) {
+        panic(sc, "list-alloc: negative length");
+    }
+    Cell *list = scheme_nil(sc);
+    for (int i = n - 1; i >= 0; i--) {
+        push_root(sc, list);
+        Cell *val = make_int(sc, i);
+        push_root(sc, val);
+        list = cons(sc, val, list);
+        pop_roots(sc, 2);
+    }
+    return list;
+}
+
 static Cell *prim_eval_string(Scheme *sc, Cell *args) {
     Cell *s = car(args);
     if (s->type != T_STRING) {
@@ -903,6 +923,7 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "string-length", prim_string_len);
     add_prim(sc, "string-ref", prim_string_ref);
     add_prim(sc, "string=?", prim_string_eq);
+    add_prim(sc, "list-alloc", prim_list_alloc);
     add_prim(sc, "eval-string", prim_eval_string);
     add_prim(sc, "eval-scoped", prim_eval_scoped);
     add_prim(sc, "disk-read-byte", prim_disk_read_byte);
