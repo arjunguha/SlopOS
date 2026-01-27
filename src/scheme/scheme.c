@@ -110,6 +110,28 @@ static Cell *make_bool(Scheme *sc, int v) {
     return v ? scheme_true(sc) : scheme_false(sc);
 }
 
+static char *alloc_str_bytes(Scheme *sc, size_t len) {
+    if (sc->str_buf_used + len + 1 > sc->str_buf_size) {
+        panic(sc, "string buffer full");
+    }
+    char *p = sc->str_buf + sc->str_buf_used;
+    sc->str_buf_used += len + 1;
+    return p;
+}
+
+static Cell *make_string_len(Scheme *sc, const char *data, size_t len) {
+    Cell *c = alloc_cell(sc);
+    c->type = T_STRING;
+    char *dst = alloc_str_bytes(sc, len);
+    for (size_t i = 0; i < len; i++) {
+        dst[i] = data[i];
+    }
+    dst[len] = '\0';
+    c->as.str.data = dst;
+    c->as.str.len = len;
+    return c;
+}
+
 static Cell *cons(Scheme *sc, Cell *a, Cell *d) {
     Cell *c = alloc_cell(sc);
     c->type = T_PAIR;
@@ -217,7 +239,7 @@ static void skip_ws(const char **s) {
 }
 
 static int is_delim(char c) {
-    return c == 0 || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '(' || c == ')';
+    return c == 0 || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '(' || c == ')' || c == '"';
 }
 
 static Cell *read_expr(Scheme *sc, const char **s);
@@ -290,6 +312,20 @@ static Cell *read_symbol(Scheme *sc, const char **s) {
     return intern_symbol_len(sc, start, len);
 }
 
+static Cell *read_string(Scheme *sc, const char **s) {
+    (*s)++;
+    const char *start = *s;
+    size_t len = 0;
+    while (**s && **s != '"') {
+        (*s)++;
+        len++;
+    }
+    if (**s == '"') {
+        (*s)++;
+    }
+    return make_string_len(sc, start, len);
+}
+
 static Cell *read_expr(Scheme *sc, const char **s) {
     skip_ws(s);
     if (**s == 0) {
@@ -318,6 +354,9 @@ static Cell *read_expr(Scheme *sc, const char **s) {
             (*s)++;
             return scheme_false(sc);
         }
+    }
+    if (**s == '"') {
+        return read_string(sc, s);
     }
 
     Cell *num = read_number(sc, s);
@@ -430,6 +469,7 @@ static Cell *eval(Scheme *sc, Cell *expr, Cell *env) {
     switch (expr->type) {
         case T_INT:
         case T_BOOL:
+        case T_STRING:
         case T_PRIMITIVE:
         case T_CLOSURE:
             return expr;
@@ -574,6 +614,133 @@ static Cell *prim_eqp(Scheme *sc, Cell *args) {
     return make_bool(sc, car(args) == car(cdr(args)));
 }
 
+static Cell *prim_string_len(Scheme *sc, Cell *args) {
+    Cell *v = car(args);
+    if (v->type != T_STRING) {
+        panic(sc, "string-length: expected string");
+    }
+    return make_int(sc, (int)v->as.str.len);
+}
+
+static Cell *prim_string_ref(Scheme *sc, Cell *args) {
+    Cell *s = car(args);
+    Cell *i = car(cdr(args));
+    if (s->type != T_STRING || i->type != T_INT) {
+        panic(sc, "string-ref: expected string and int");
+    }
+    if (i->as.i < 0 || (size_t)i->as.i >= s->as.str.len) {
+        panic(sc, "string-ref: index out of range");
+    }
+    return make_int(sc, (unsigned char)s->as.str.data[i->as.i]);
+}
+
+static Cell *prim_string_eq(Scheme *sc, Cell *args) {
+    Cell *a = car(args);
+    Cell *b = car(cdr(args));
+    if (a->type != T_STRING || b->type != T_STRING) {
+        panic(sc, "string=?: expected strings");
+    }
+    if (a->as.str.len != b->as.str.len) {
+        return scheme_false(sc);
+    }
+    for (size_t i = 0; i < a->as.str.len; i++) {
+        if (a->as.str.data[i] != b->as.str.data[i]) {
+            return scheme_false(sc);
+        }
+    }
+    return scheme_true(sc);
+}
+
+static Cell *prim_eval_string(Scheme *sc, Cell *args) {
+    Cell *s = car(args);
+    if (s->type != T_STRING) {
+        panic(sc, "eval-string: expected string");
+    }
+    int count = scheme_eval_string(sc, s->as.str.data);
+    return make_int(sc, count);
+}
+
+static int platform_read_byte(Scheme *sc, int offset) {
+    if (!sc->platform.read_byte) {
+        panic(sc, "disk-read-byte: not supported");
+    }
+    return sc->platform.read_byte(sc->platform.user, offset);
+}
+
+static int platform_disk_size(Scheme *sc) {
+    if (!sc->platform.disk_size) {
+        panic(sc, "disk-size: not supported");
+    }
+    return sc->platform.disk_size(sc->platform.user);
+}
+
+static Cell *prim_disk_read_byte(Scheme *sc, Cell *args) {
+    Cell *off = car(args);
+    if (off->type != T_INT) {
+        panic(sc, "disk-read-byte: expected int");
+    }
+    return make_int(sc, platform_read_byte(sc, off->as.i));
+}
+
+static Cell *prim_disk_size(Scheme *sc, Cell *args) {
+    (void)args;
+    return make_int(sc, platform_disk_size(sc));
+}
+
+static Cell *prim_disk_read_bytes(Scheme *sc, Cell *args) {
+    Cell *off = car(args);
+    Cell *len = car(cdr(args));
+    if (off->type != T_INT || len->type != T_INT) {
+        panic(sc, "disk-read-bytes: expected int int");
+    }
+    if (len->as.i < 0) {
+        panic(sc, "disk-read-bytes: negative length");
+    }
+    size_t n = (size_t)len->as.i;
+    char *buf = alloc_str_bytes(sc, n);
+    for (size_t i = 0; i < n; i++) {
+        int v = platform_read_byte(sc, off->as.i + (int)i);
+        if (v < 0) {
+            buf[i] = 0;
+        } else {
+            buf[i] = (char)v;
+        }
+    }
+    buf[n] = '\0';
+    Cell *c = alloc_cell(sc);
+    c->type = T_STRING;
+    c->as.str.data = buf;
+    c->as.str.len = n;
+    return c;
+}
+
+static Cell *prim_disk_read_cstring(Scheme *sc, Cell *args) {
+    Cell *off = car(args);
+    Cell *maxlen = car(cdr(args));
+    if (off->type != T_INT || maxlen->type != T_INT) {
+        panic(sc, "disk-read-cstring: expected int int");
+    }
+    if (maxlen->as.i < 0) {
+        panic(sc, "disk-read-cstring: negative length");
+    }
+    size_t n = (size_t)maxlen->as.i;
+    char *buf = alloc_str_bytes(sc, n);
+    size_t actual = 0;
+    for (; actual < n; actual++) {
+        int v = platform_read_byte(sc, off->as.i + (int)actual);
+        if (v <= 0) {
+            break;
+        }
+        buf[actual] = (char)v;
+    }
+    buf[actual] = '\0';
+    Cell *c = alloc_cell(sc);
+    c->type = T_STRING;
+    c->as.str.data = buf;
+    c->as.str.len = actual;
+    return c;
+}
+
 static Cell *prim_display(Scheme *sc, Cell *args) {
     Cell *v = car(args);
     if (v->type == T_INT) {
@@ -600,6 +767,12 @@ static Cell *prim_display(Scheme *sc, Cell *args) {
         while (*p) {
             putc_out(sc, *p++);
         }
+    } else if (v->type == T_STRING) {
+        const char *p = v->as.str.data;
+        size_t len = v->as.str.len;
+        for (size_t i = 0; i < len; i++) {
+            putc_out(sc, p[i]);
+        }
     } else if (is_nil(sc, v)) {
         putc_out(sc, '(');
         putc_out(sc, ')');
@@ -619,6 +792,37 @@ static Cell *prim_newline(Scheme *sc, Cell *args) {
     return scheme_nil(sc);
 }
 
+static Cell *prim_foreign_call(Scheme *sc, Cell *args) {
+    if (is_nil(sc, args)) {
+        panic(sc, "foreign-call: missing symbol");
+    }
+    Cell *name_cell = car(args);
+    if (name_cell->type != T_SYMBOL) {
+        panic(sc, "foreign-call: name must be symbol");
+    }
+    if (!sc->platform.foreign_call) {
+        panic(sc, "foreign-call: not supported");
+    }
+
+    int argv[8];
+    int argc = 0;
+    args = cdr(args);
+    while (!is_nil(sc, args)) {
+        if (argc >= (int)(sizeof(argv) / sizeof(argv[0]))) {
+            panic(sc, "foreign-call: too many args");
+        }
+        Cell *v = car(args);
+        if (v->type != T_INT) {
+            panic(sc, "foreign-call: args must be int");
+        }
+        argv[argc++] = v->as.i;
+        args = cdr(args);
+    }
+
+    int ret = sc->platform.foreign_call(name_cell->as.sym.name, argc, argv);
+    return make_int(sc, ret);
+}
+
 static void add_prim(Scheme *sc, const char *name, PrimFn fn) {
     Cell *sym = intern_symbol(sc, name);
     Cell *prim = make_prim(sc, fn);
@@ -631,6 +835,9 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     sc->sym_buf = cfg->sym_buf;
     sc->sym_buf_size = cfg->sym_buf_size;
     sc->sym_buf_used = 0;
+    sc->str_buf = cfg->str_buf;
+    sc->str_buf_size = cfg->str_buf_size;
+    sc->str_buf_used = 0;
     sc->platform = cfg->platform;
     sc->root_top = 0;
 
@@ -662,8 +869,17 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "null?", prim_nullp);
     add_prim(sc, "pair?", prim_pairp);
     add_prim(sc, "eq?", prim_eqp);
+    add_prim(sc, "string-length", prim_string_len);
+    add_prim(sc, "string-ref", prim_string_ref);
+    add_prim(sc, "string=?", prim_string_eq);
+    add_prim(sc, "eval-string", prim_eval_string);
+    add_prim(sc, "disk-read-byte", prim_disk_read_byte);
+    add_prim(sc, "disk-read-bytes", prim_disk_read_bytes);
+    add_prim(sc, "disk-read-cstring", prim_disk_read_cstring);
+    add_prim(sc, "disk-size", prim_disk_size);
     add_prim(sc, "display", prim_display);
     add_prim(sc, "newline", prim_newline);
+    add_prim(sc, "foreign-call", prim_foreign_call);
 }
 
 int scheme_eval_string(Scheme *sc, const char *input) {

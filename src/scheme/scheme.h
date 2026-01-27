@@ -20,6 +20,7 @@ typedef enum {
     T_NIL,
     T_BOOL,
     T_INT,
+    T_STRING,
     T_SYMBOL,
     T_PAIR,
     T_PRIMITIVE,
@@ -40,6 +41,10 @@ typedef struct Cell {
             const char *name;
         } sym;
         struct {
+            const char *data;
+            size_t len;
+        } str;
+        struct {
             struct Cell *(*fn)(struct Scheme *sc, struct Cell *args);
         } prim;
         struct {
@@ -52,10 +57,17 @@ typedef struct Cell {
 
 typedef void (*scheme_putc_fn)(char c);
 typedef void (*scheme_panic_fn)(const char *msg);
+typedef int (*scheme_foreign_call_fn)(const char *name, int argc, const int *argv);
+typedef int (*scheme_read_byte_fn)(void *user, int offset);
+typedef int (*scheme_disk_size_fn)(void *user);
 
 typedef struct SchemePlatform {
+    void *user;
     scheme_putc_fn putc;
     scheme_panic_fn panic;
+    scheme_foreign_call_fn foreign_call;
+    scheme_read_byte_fn read_byte;
+    scheme_disk_size_fn disk_size;
 } SchemePlatform;
 
 typedef struct Scheme {
@@ -66,6 +78,10 @@ typedef struct Scheme {
     char *sym_buf;
     size_t sym_buf_size;
     size_t sym_buf_used;
+
+    char *str_buf;
+    size_t str_buf_size;
+    size_t str_buf_used;
 
     Cell *interned_syms;
 
@@ -86,6 +102,8 @@ typedef struct SchemeConfig {
     size_t heap_cells;
     char *sym_buf;
     size_t sym_buf_size;
+    char *str_buf;
+    size_t str_buf_size;
     SchemePlatform platform;
 } SchemeConfig;
 

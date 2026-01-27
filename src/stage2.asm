@@ -12,10 +12,21 @@ ORG 0x8000
 %define KERNEL_LBA 5
 %endif
 
+%ifndef RAMDISK_SECTORS
+%define RAMDISK_SECTORS 0
+%endif
+
+%ifndef RAMDISK_LBA
+%define RAMDISK_LBA 0
+%endif
+
 KERNEL_LOAD_SEG  equ 0x1000
 KERNEL_LOAD_OFF  equ 0x0000
 KERNEL_LOAD_ADDR equ 0x10000
-KERNEL_ENTRY     equ 0x00100000
+KERNEL_ENTRY     equ KERNEL_LOAD_ADDR
+RAMDISK_LOAD_SEG equ 0x8000
+RAMDISK_LOAD_ADDR equ 0x80000
+BOOT_INFO_ADDR equ 0x9000
 
 SECTORS_PER_TRACK equ 18
 HEADS_PER_CYL     equ 2
@@ -34,7 +45,10 @@ start:
     call enable_a20
     ; Keep real-mode output minimal; C kernel prints the banner.
     call load_kernel
+    call load_ramdisk
     call e820_probe
+    mov dword [BOOT_INFO_ADDR], RAMDISK_LOAD_ADDR
+    mov dword [BOOT_INFO_ADDR + 4], RAMDISK_SECTORS * 512
 
     cli
     lgdt [gdt_descriptor]
@@ -102,6 +116,7 @@ load_kernel:
     mov si, KERNEL_LBA
 
 .load_loop:
+    mov es, ax
     push cx
     push bx
     push si
@@ -118,6 +133,37 @@ load_kernel:
     inc si
     loop .load_loop
 
+    popa
+    ret
+
+load_ramdisk:
+    pusha
+    mov ax, RAMDISK_LOAD_SEG
+    mov es, ax
+    xor bx, bx
+    mov cx, RAMDISK_SECTORS
+    mov si, RAMDISK_LBA
+    cmp cx, 0
+    je .done
+
+.load_loop:
+    mov es, ax
+    push cx
+    push bx
+    push si
+    call read_sector_lba
+    pop si
+    pop bx
+    pop cx
+
+    add bx, 512
+    jnc .next
+    add ax, 0x20
+    mov es, ax
+.next:
+    inc si
+    loop .load_loop
+.done:
     popa
     ret
 
@@ -197,7 +243,6 @@ pmode_entry:
     mov ss, ax
     mov esp, 0x9FC00
 
-    call copy_kernel
     call KERNEL_ENTRY
 
 .hang:
@@ -419,10 +464,3 @@ gdt_descriptor:
 
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
-copy_kernel:
-    mov esi, KERNEL_LOAD_ADDR
-    mov edi, KERNEL_ENTRY
-    mov ecx, (KERNEL_SECTORS * 512) / 4
-    cld
-    rep movsd
-    ret

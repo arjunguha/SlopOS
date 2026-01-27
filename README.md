@@ -39,6 +39,7 @@ This produces:
 - `build/stage1.bin` (512-byte boot sector)
 - `build/stage2.bin` (second-stage loader)
 - `build/kernel.bin` (freestanding 32-bit kernel image)
+- `build/fs.img` (flat filesystem image with Scheme programs)
 - `build/os.img` (1.44MB floppy image with both stages + kernel)
 
 ## Run
@@ -53,9 +54,29 @@ Expected output:
 Hello from C!
 factorial(5) = 120
 scheme factorial(5) = 120
+1
+2
+1
+2
+1
+2
+1
+2
+1
+2
 ```
 
 QEMU powers off automatically after the output.
+
+## Flat filesystem image
+
+The packer builds a tiny flat filesystem (no directories) from `programs/`:
+
+```bash
+python3 scripts/mkfs.py programs build/fs.img
+```
+
+`init.scm` is loaded from this filesystem at boot.
 
 ## Scheme interpreter (Linux)
 
@@ -70,4 +91,11 @@ You can pass a Scheme file to run:
 
 ```bash
 ./build/scheme-host path/to/program.scm
+```
+
+To test disk-backed loading in the host interpreter, pass the filesystem image
+as a second argument:
+
+```bash
+./build/scheme-host path/to/program.scm build/fs.img
 ```
