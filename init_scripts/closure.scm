@@ -1,0 +1,7 @@
+(display "closure test")
+(newline)
+(define x 10)
+(define (F x) (lambda (y) (+ x y)))
+(define G (F 2))
+(display (G 3))
+(newline)

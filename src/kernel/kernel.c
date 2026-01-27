@@ -160,7 +160,6 @@ void kmain(void) {
     static const char hello_msg[] = "Hello from C!\n";
     static const char fact_msg[] = "factorial(5) = ";
     static const char newline_msg[] = "\n";
-    static const char scheme_msg[] = "scheme factorial(5) = ";
 
     unsigned int n = 5;
     unsigned int result = factorial(n);
@@ -199,7 +198,6 @@ void kmain(void) {
     cfg.platform.disk_size = scheme_disk_size;
 
     scheme_init(&sc, &cfg);
-    console_write(scheme_msg);
     static char boot_buf[4096];
     unsigned int boot_len = read_u32_le(ramdisk_base);
     if (boot_len >= sizeof(boot_buf)) {

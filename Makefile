@@ -6,6 +6,11 @@ STAGE2 := $(BUILD)/stage2.bin
 IMG := $(BUILD)/os.img
 FS_DIR := programs
 FSIMG := $(BUILD)/fs.img
+FSIMG_INIT := $(BUILD)/fs_init.img
+INIT_DIR := init_scripts
+DEFAULT_INIT := default
+INIT_SCRIPTS := $(shell find $(INIT_DIR) -type f -name "*.scm" 2>/dev/null)
+INIT_NAMES := $(basename $(notdir $(INIT_SCRIPTS)))
 MKFS := scripts/mkfs.py
 
 KERNEL_ASM := src/kernel/entry.asm src/kernel/isr.asm src/kernel/context.asm
@@ -61,10 +66,11 @@ $(KERNEL_ELF): $(KERNEL_OBJS) linker.ld | $(BUILD)
 $(KERNEL_BIN): $(KERNEL_ELF) | $(BUILD)
 	$(OBJCOPY) -O binary $< $@
 
-FS_FILES := $(shell find $(FS_DIR) -type f 2>/dev/null)
-
-$(FSIMG): $(MKFS) $(FS_FILES) | $(BUILD)
-	python3 $(MKFS) $(FS_DIR) $@
+$(FSIMG): $(MKFS) $(FS_DIR)/boot.scm $(INIT_DIR)/$(DEFAULT_INIT).scm | $(BUILD)
+	@mkdir -p $(BUILD)/tmp_programs_default; \
+	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_default/boot.scm; \
+	cp $(INIT_DIR)/$(DEFAULT_INIT).scm $(BUILD)/tmp_programs_default/init.scm; \
+	python3 $(MKFS) $(BUILD)/tmp_programs_default $@
 
 $(STAGE2): $(ASM_STAGE2) $(KERNEL_BIN) $(FSIMG) | $(BUILD)
 	@kernel_bytes=`stat -c%s $(KERNEL_BIN)`; \
@@ -100,6 +106,37 @@ $(IMG): $(STAGE1) $(STAGE2) $(KERNEL_BIN) $(FSIMG) | $(BUILD)
 
 run: $(IMG)
 	$(QEMU) -drive if=floppy,format=raw,file=$(IMG) -display none -serial stdio -monitor none
+
+$(BUILD)/fs_%.img: $(MKFS) $(FS_DIR)/boot.scm $(INIT_DIR)/%.scm | $(BUILD)
+	@mkdir -p $(BUILD)/tmp_programs_$*; \
+	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_$*/boot.scm; \
+	cp $(INIT_DIR)/$*.scm $(BUILD)/tmp_programs_$*/init.scm; \
+	python3 $(MKFS) $(BUILD)/tmp_programs_$* $@
+
+$(BUILD)/os_%.img: $(STAGE1) $(STAGE2) $(KERNEL_BIN) $(BUILD)/fs_%.img | $(BUILD)
+	@stage2_bytes=`stat -c%s $(STAGE2)`; \
+	stage2_sectors=`python3 -c "import sys; size=int(sys.argv[1]); print((size + 511) // 512)" $$stage2_bytes`; \
+	kernel_lba=`python3 -c "import sys; print(1 + int(sys.argv[1]))" $$stage2_sectors`; \
+	kernel_bytes=`stat -c%s $(KERNEL_BIN)`; \
+	kernel_sectors=`python3 -c "import sys; size=int(sys.argv[1]); print((size + 511) // 512)" $$kernel_bytes`; \
+	ramdisk_lba=`python3 -c "import sys; print(int(sys.argv[1]) + int(sys.argv[2]))" $$kernel_lba $$kernel_sectors`; \
+	disk_sectors=`python3 -c "import sys; print(2880)"`; \
+	dd if=/dev/zero of=$@ bs=512 count=$$disk_sectors; \
+	dd if=$(STAGE1) of=$@ bs=512 count=1 conv=notrunc; \
+	dd if=$(STAGE2) of=$@ bs=512 seek=1 conv=notrunc; \
+	dd if=$(KERNEL_BIN) of=$@ bs=512 seek=$$kernel_lba conv=notrunc; \
+	dd if=$(BUILD)/fs_$*.img of=$@ bs=512 seek=$$ramdisk_lba conv=notrunc
+
+images: $(addprefix $(BUILD)/os_,$(addsuffix .img,$(INIT_NAMES)))
+
+run-init:
+	@name="$(NAME)"; \
+	if [ -z "$$name" ]; then \
+		echo "error: NAME not set (example: make run-init NAME=hello)"; \
+		exit 1; \
+	fi; \
+	$(MAKE) $(BUILD)/os_$$name.img; \
+	$(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_$$name.img -display none -serial stdio -monitor none
 
 scheme-host: src/scheme_host/main.c src/scheme/scheme.c src/scheme/scheme.h | $(BUILD)
 	gcc -O2 -Wall -Wextra -I src -o $(BUILD)/scheme-host src/scheme_host/main.c src/scheme/scheme.c

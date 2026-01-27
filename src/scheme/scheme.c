@@ -243,6 +243,7 @@ static int is_delim(char c) {
 }
 
 static Cell *read_expr(Scheme *sc, const char **s);
+static int eval_string_in_env(Scheme *sc, const char *input, Cell *env);
 
 static Cell *read_list(Scheme *sc, const char **s) {
     skip_ws(s);
@@ -656,7 +657,37 @@ static Cell *prim_eval_string(Scheme *sc, Cell *args) {
     if (s->type != T_STRING) {
         panic(sc, "eval-string: expected string");
     }
-    int count = scheme_eval_string(sc, s->as.str.data);
+    int count = eval_string_in_env(sc, s->as.str.data, sc->global_env);
+    return make_int(sc, count);
+}
+
+static Cell *prim_eval_scoped(Scheme *sc, Cell *args) {
+    Cell *alist = car(args);
+    Cell *code = car(cdr(args));
+    if (code->type != T_STRING) {
+        panic(sc, "eval-scoped: expected string");
+    }
+
+    Cell *env = cons(sc, scheme_nil(sc), scheme_nil(sc));
+    push_root(sc, alist);
+    push_root(sc, code);
+    push_root(sc, env);
+    while (!is_nil(sc, alist)) {
+        Cell *binding = car(alist);
+        if (binding->type != T_PAIR) {
+            panic(sc, "eval-scoped: invalid binding");
+        }
+        Cell *sym = car(binding);
+        Cell *val = cdr(binding);
+        if (sym->type != T_SYMBOL) {
+            panic(sc, "eval-scoped: binding name must be symbol");
+        }
+        env_define(sc, env, sym, val);
+        alist = cdr(alist);
+    }
+
+    int count = eval_string_in_env(sc, code->as.str.data, env);
+    pop_roots(sc, 3);
     return make_int(sc, count);
 }
 
@@ -873,6 +904,7 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "string-ref", prim_string_ref);
     add_prim(sc, "string=?", prim_string_eq);
     add_prim(sc, "eval-string", prim_eval_string);
+    add_prim(sc, "eval-scoped", prim_eval_scoped);
     add_prim(sc, "disk-read-byte", prim_disk_read_byte);
     add_prim(sc, "disk-read-bytes", prim_disk_read_bytes);
     add_prim(sc, "disk-read-cstring", prim_disk_read_cstring);
@@ -883,6 +915,10 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
 }
 
 int scheme_eval_string(Scheme *sc, const char *input) {
+    return eval_string_in_env(sc, input, sc->global_env);
+}
+
+static int eval_string_in_env(Scheme *sc, const char *input, Cell *env) {
     const char *p = input;
     int count = 0;
     while (1) {
@@ -890,7 +926,7 @@ int scheme_eval_string(Scheme *sc, const char *input) {
         if (!expr) {
             break;
         }
-        eval(sc, expr, sc->global_env);
+        eval(sc, expr, env);
         count++;
     }
     return count;

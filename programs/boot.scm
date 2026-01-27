@@ -14,6 +14,26 @@
   (define dir-len (u32 (+ sb 16)))
   (define dir-limit (+ dir-off dir-len))
 
+  (define allowed
+    (cons (cons 'display display)
+      (cons (cons 'newline newline)
+        (cons (cons '+ +)
+          (cons (cons '- -)
+            (cons (cons '* *)
+              (cons (cons '< <)
+                (cons (cons '= =)
+                  (cons (cons 'cons cons)
+                    (cons (cons 'car car)
+                      (cons (cons 'cdr cdr)
+                        (cons (cons 'null? null?)
+                          (cons (cons 'pair? pair?)
+                            (cons (cons 'eq? eq?)
+                              (cons (cons 'string-length string-length)
+                                (cons (cons 'string-ref string-ref)
+                                  (cons (cons 'string=? string=?)
+                                    (cons (cons 'eval-string eval-string)
+                                      '()))))))))))))))))))
+
   (define (find-file-loop name off)
     (if (< off dir-limit)
         (if (string=? (disk-read-cstring off 64) name)
@@ -27,7 +47,7 @@
     (begin
       (define info (find-file name))
       (if info
-          (eval-string (disk-read-bytes (car info) (cadr info)))
+          (eval-scoped allowed (disk-read-bytes (car info) (cadr info)))
           (begin (display "missing file: ") (display name) (newline)))))
 
   (load "init.scm"))

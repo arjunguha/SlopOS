@@ -48,22 +48,24 @@ This produces:
 make run
 ```
 
+To run a specific init program by name (e.g., `init_scripts/alt.scm`):
+
+```bash
+make run-init NAME=alt
+```
+
+To build images for every init script:
+
+```bash
+make images
+```
+
 Expected output:
 
 ```
 Hello from C!
 factorial(5) = 120
-scheme factorial(5) = 120
-1
-2
-1
-2
-1
-2
-1
-2
-1
-2
+120
 ```
 
 QEMU powers off automatically after the output.
@@ -78,6 +80,11 @@ python3 scripts/mkfs.py programs build/fs.img
 
 `boot.scm` is read from a fixed location at the start of the image. It defines
 filesystem helpers and then loads `init.scm` from the flat filesystem region.
+
+## Init scripts
+
+Init programs live in `init_scripts/`. The default image uses
+`init_scripts/default.scm`.
 
 ### Boot + filesystem image layout
 
