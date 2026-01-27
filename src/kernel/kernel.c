@@ -102,6 +102,7 @@ enum { MAX_SCHEME_THREADS = 4 };
 enum { SCHEME_PROGRAM_COUNT = 2 };
 
 static const char *scheme_programs[SCHEME_PROGRAM_COUNT] = {
+    // Simple cooperative Scheme programs used to exercise threads/FFI.
     "(begin "
     "  (define (loop n) "
     "    (if (< n 1) 0 "
@@ -118,6 +119,7 @@ static SchemeThreadCtx scheme_threads[MAX_SCHEME_THREADS];
 
 static void scheme_thread(void *arg) {
     SchemeThreadCtx *ctx = (SchemeThreadCtx *)arg;
+    // Each thread gets its own Scheme heap and buffers.
     SchemeConfig cfg;
     cfg.heap = ctx->heap;
     cfg.heap_cells = sizeof(ctx->heap) / sizeof(ctx->heap[0]);
@@ -161,6 +163,7 @@ void kmain(void) {
     static const char fact_msg[] = "factorial(5) = ";
     static const char newline_msg[] = "\n";
 
+    // Early console output sanity check.
     unsigned int n = 5;
     unsigned int result = factorial(n);
     const BootInfo *info = boot_info();
@@ -179,6 +182,7 @@ void kmain(void) {
     pit_init(100);
     __asm__ volatile ("sti");
 
+    // Main Scheme instance that runs boot.scm out of the ramdisk.
     static Cell heap[4096];
     static char sym_buf[8192];
     static char str_buf[8192];
@@ -203,12 +207,14 @@ void kmain(void) {
     if (boot_len >= sizeof(boot_buf)) {
         scheme_panic("boot.scm too large");
     }
+    // Copy boot.scm into a null-terminated buffer for the interpreter.
     for (unsigned int i = 0; i < boot_len; i++) {
         boot_buf[i] = (char)ramdisk_base[8 + i];
     }
     boot_buf[boot_len] = '\0';
     scheme_eval_string(&sc, boot_buf);
 
+    // Wait for cooperative Scheme threads to finish, then power off.
     while (thread_active_count() > 0) {
         thread_yield();
     }

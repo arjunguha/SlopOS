@@ -28,6 +28,9 @@ static void write_str(Scheme *sc, const char *s) {
     }
 }
 
+// push_root: protect a cell from GC during intermediate allocations.
+// Args: sc (interpreter state), v (cell to protect).
+// Returns: none.
 static void push_root(Scheme *sc, Cell *v) {
     if (sc->root_top >= ROOT_STACK_MAX) {
         panic(sc, "root stack overflow");
@@ -64,6 +67,9 @@ static void mark_cell(Scheme *sc, Cell *c) {
     }
 }
 
+// gc_collect: mark-and-sweep collector using global env, interned symbols, and root stack.
+// Args: sc (interpreter state).
+// Returns: none.
 static void gc_collect(Scheme *sc) {
     size_t i;
 
@@ -86,6 +92,9 @@ static void gc_collect(Scheme *sc) {
     }
 }
 
+// alloc_cell: allocate a new cell from the freelist, collecting if needed.
+// Args: sc (interpreter state).
+// Returns: pointer to a newly allocated cell.
 static Cell *alloc_cell(Scheme *sc) {
     if (!sc->free_list) {
         gc_collect(sc);
@@ -327,6 +336,9 @@ static Cell *read_string(Scheme *sc, const char **s) {
     return make_string_len(sc, start, len);
 }
 
+// read_expr: parse a single expression from the input cursor.
+// Args: sc (interpreter state), s (pointer to input cursor).
+// Returns: parsed expression cell, or NULL at end of input.
 static Cell *read_expr(Scheme *sc, const char **s) {
     skip_ws(s);
     if (**s == 0) {
@@ -411,6 +423,9 @@ static int env_set(Scheme *sc, Cell *env, Cell *sym, Cell *val) {
 
 static Cell *eval(Scheme *sc, Cell *expr, Cell *env);
 
+// eval_list: evaluate each element of a list in order.
+// Args: sc (interpreter state), list (list of expressions), env (environment).
+// Returns: list of evaluated values.
 static Cell *eval_list(Scheme *sc, Cell *list, Cell *env) {
     if (is_nil(sc, list)) {
         return scheme_nil(sc);
@@ -434,6 +449,9 @@ static Cell *eval_list(Scheme *sc, Cell *list, Cell *env) {
     return head ? head : scheme_nil(sc);
 }
 
+// apply: apply a primitive or closure to evaluated arguments.
+// Args: sc (interpreter state), fn (function), args (argument list).
+// Returns: result cell.
 static Cell *apply(Scheme *sc, Cell *fn, Cell *args) {
     if (fn->type == T_PRIMITIVE) {
         return fn->as.prim.fn(sc, args);
@@ -463,6 +481,9 @@ static int is_symbol(Cell *c, const char *name) {
     return c->type == T_SYMBOL && streq(c->as.sym.name, name);
 }
 
+// eval: evaluate an expression in the given environment.
+// Args: sc (interpreter state), expr (expression), env (environment).
+// Returns: result cell.
 static Cell *eval(Scheme *sc, Cell *expr, Cell *env) {
     if (!expr) {
         return scheme_nil(sc);
@@ -672,6 +693,9 @@ static Cell *prim_list_alloc(Scheme *sc, Cell *args) {
     return list;
 }
 
+// prim_eval_string: evaluate a string in the global environment.
+// Args: sc (interpreter state), args (string cell).
+// Returns: int cell with number of expressions evaluated.
 static Cell *prim_eval_string(Scheme *sc, Cell *args) {
     Cell *s = car(args);
     if (s->type != T_STRING) {
@@ -681,6 +705,9 @@ static Cell *prim_eval_string(Scheme *sc, Cell *args) {
     return make_int(sc, count);
 }
 
+// prim_eval_scoped: evaluate a string in a fresh environment with given bindings.
+// Args: sc (interpreter state), args (alist, string).
+// Returns: int cell with number of expressions evaluated.
 static Cell *prim_eval_scoped(Scheme *sc, Cell *args) {
     Cell *alist = car(args);
     Cell *code = car(cdr(args));
@@ -880,6 +907,9 @@ static void add_prim(Scheme *sc, const char *name, PrimFn fn) {
     env_define(sc, sc->global_env, sym, prim);
 }
 
+// scheme_init: initialize interpreter state, heap, buffers, and primitives.
+// Args: sc (interpreter state), cfg (configuration pointers/sizes).
+// Returns: none.
 void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     sc->heap = cfg->heap;
     sc->heap_cells = cfg->heap_cells;
