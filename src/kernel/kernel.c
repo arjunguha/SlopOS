@@ -5,13 +5,6 @@
 #include "scheme/scheme.h"
 #include "thread.h"
 
-static unsigned int factorial(unsigned int n) {
-    if (n <= 1) {
-        return 1;
-    }
-    return n * factorial(n - 1);
-}
-
 static void acpi_shutdown(void) {
     /* QEMU ACPI poweroff */
     outw(0x604, 0x2000);
@@ -82,6 +75,14 @@ static int scheme_disk_size(void *user) {
     return (int)ramdisk_size;
 }
 
+static int scheme_read_char(void *user) {
+    (void)user;
+    while (!console_has_input()) {
+        thread_yield();
+    }
+    return (unsigned char)console_getc();
+}
+
 static unsigned int read_u32_le(const unsigned char *p) {
     return (unsigned int)p[0] |
            ((unsigned int)p[1] << 8) |
@@ -133,6 +134,7 @@ static void scheme_thread(void *arg) {
     cfg.platform.foreign_call = scheme_foreign_call;
     cfg.platform.read_byte = scheme_read_byte;
     cfg.platform.disk_size = scheme_disk_size;
+    cfg.platform.read_char = scheme_read_char;
 
     scheme_init(&ctx->sc, &cfg);
     scheme_eval_string(&ctx->sc, ctx->program);
@@ -159,22 +161,13 @@ static int scheme_spawn_program(int program_id) {
 }
 
 void kmain(void) {
-    static const char hello_msg[] = "Hello from C!\n";
-    static const char fact_msg[] = "factorial(5) = ";
-    static const char newline_msg[] = "\n";
-
-    // Early console output sanity check.
-    unsigned int n = 5;
-    unsigned int result = factorial(n);
+    static const char boot_msg[] = "SlopOS booting...\n";
     const BootInfo *info = boot_info();
     ramdisk_base = (unsigned char *)info->ramdisk_base;
     ramdisk_size = info->ramdisk_size;
 
     console_init();
-    console_write(hello_msg);
-    console_write(fact_msg);
-    console_write_dec(result);
-    console_write(newline_msg);
+    console_write(boot_msg);
 
     thread_init();
     pic_remap();
@@ -200,6 +193,7 @@ void kmain(void) {
     cfg.platform.foreign_call = scheme_foreign_call;
     cfg.platform.read_byte = scheme_read_byte;
     cfg.platform.disk_size = scheme_disk_size;
+    cfg.platform.read_char = scheme_read_char;
 
     scheme_init(&sc, &cfg);
     static char boot_buf[4096];
