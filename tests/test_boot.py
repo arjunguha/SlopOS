@@ -15,7 +15,11 @@ def run_init(path: Path, input_text: str = "") -> str:
         stderr=subprocess.STDOUT,
         check=True,
     )
-    return proc.stdout.decode(errors="replace")
+    out = proc.stdout.decode(errors="replace")
+    out = out.replace("\r\n", "\n")
+    if "SlopOS booting..." in out:
+        out = out[out.index("SlopOS booting...") :]
+    return out
 
 
 def test_closure_script_runs():
