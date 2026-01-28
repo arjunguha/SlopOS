@@ -21,10 +21,10 @@
 
 (define (string->revlist s)
   (define (loop i acc)
-    (if (< i 0)
-        acc
-        (loop (- i 1) (cons (string-ref s i) acc))))
-  (loop (- (string-length s) 1) '()))
+    (if (< i (string-length s))
+        (loop (+ i 1) (cons (string-ref s i) acc))
+        acc))
+  (loop 0 '()))
 
 (define (string-trim-left s)
   (define (loop i)

@@ -122,12 +122,15 @@ def run_shell(init_path: Path, steps: list[object], timeout: float = 15.0) -> st
 
         while proc.poll() is None and time.time() < deadline:
             drain_output(0.1)
-        if proc.poll() is None:
-            proc.kill()
     finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
         drain_output(0.1)
         os.close(master_fd)
 
     out = output.decode(errors="replace")
     return out.replace("\r\n", "\n")
-
