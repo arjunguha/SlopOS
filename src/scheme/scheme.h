@@ -62,6 +62,8 @@ typedef int (*scheme_foreign_call_fn)(const char *name, int argc, const int *arg
 typedef int (*scheme_read_byte_fn)(void *user, int offset);
 typedef int (*scheme_disk_size_fn)(void *user);
 typedef int (*scheme_read_char_fn)(void *user);
+typedef int (*scheme_write_bytes_fn)(void *user, int offset, const char *data, int len);
+typedef int (*scheme_spawn_thread_fn)(void *user, const char *code);
 
 typedef struct SchemePlatform {
     void *user;
@@ -71,6 +73,8 @@ typedef struct SchemePlatform {
     scheme_read_byte_fn read_byte;
     scheme_disk_size_fn disk_size;
     scheme_read_char_fn read_char;
+    scheme_write_bytes_fn write_bytes;
+    scheme_spawn_thread_fn spawn_thread;
 } SchemePlatform;
 
 typedef struct Scheme {

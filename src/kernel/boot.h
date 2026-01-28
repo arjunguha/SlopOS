@@ -6,6 +6,9 @@
 typedef struct BootInfo {
     unsigned int ramdisk_base;
     unsigned int ramdisk_size;
+    unsigned int ramdisk_lba;
+    unsigned int e820_count;
+    unsigned int e820_addr;
 } BootInfo;
 
 static inline const BootInfo *boot_info(void) {

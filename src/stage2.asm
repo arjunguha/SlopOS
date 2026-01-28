@@ -49,6 +49,11 @@ start:
     call e820_probe
     mov dword [BOOT_INFO_ADDR], RAMDISK_LOAD_ADDR
     mov dword [BOOT_INFO_ADDR + 4], RAMDISK_SECTORS * 512
+    mov dword [BOOT_INFO_ADDR + 8], RAMDISK_LBA
+    movzx eax, word [e820_count]
+    mov dword [BOOT_INFO_ADDR + 12], eax
+    mov eax, e820_entries
+    mov dword [BOOT_INFO_ADDR + 16], eax
 
     cli
     lgdt [gdt_descriptor]

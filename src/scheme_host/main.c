@@ -54,6 +54,20 @@ static int host_disk_size(void *user) {
     return (int)disk->size;
 }
 
+static int host_write_bytes(void *user, int offset, const char *data, int len) {
+    HostDisk *disk = (HostDisk *)user;
+    if (!disk || !disk->data || offset < 0 || len < 0) {
+        return -1;
+    }
+    if ((size_t)offset + (size_t)len > disk->size) {
+        return -1;
+    }
+    for (int i = 0; i < len; i++) {
+        disk->data[offset + i] = (unsigned char)data[i];
+    }
+    return len;
+}
+
 int main(int argc, char **argv) {
     const char *default_program =
         "(begin\n"
@@ -88,8 +102,8 @@ int main(int argc, char **argv) {
     }
 
     const size_t heap_cells = 4096;
-    const size_t sym_buf_size = 8192;
-    const size_t str_buf_size = 8192;
+    const size_t sym_buf_size = 16384;
+    const size_t str_buf_size = 65536;
     struct Cell *heap = (struct Cell *)calloc(heap_cells, sizeof(struct Cell));
     char *sym_buf = (char *)calloc(sym_buf_size, 1);
     char *str_buf = (char *)calloc(str_buf_size, 1);
@@ -139,6 +153,8 @@ int main(int argc, char **argv) {
     cfg.platform.read_byte = host_read_byte;
     cfg.platform.disk_size = host_disk_size;
     cfg.platform.read_char = host_read_char;
+    cfg.platform.write_bytes = host_write_bytes;
+    cfg.platform.spawn_thread = NULL;
 
     scheme_init(&sc, &cfg);
     scheme_eval_string(&sc, input ? input : default_program);

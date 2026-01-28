@@ -12,8 +12,8 @@ INIT_NAMES := $(basename $(notdir $(INIT_SCRIPTS)))
 MKFS := scripts/mkfs.py
 
 KERNEL_ASM := src/kernel/entry.asm src/kernel/isr.asm src/kernel/context.asm
-KERNEL_C := src/kernel/kernel.c src/kernel/console.c src/kernel/idt.c src/kernel/thread.c src/scheme/scheme.c
-KERNEL_OBJS := $(BUILD)/entry.o $(BUILD)/isr.o $(BUILD)/context.o $(BUILD)/kernel.o $(BUILD)/console.o $(BUILD)/idt.o $(BUILD)/thread.o $(BUILD)/scheme.o
+KERNEL_C := src/kernel/kernel.c src/kernel/console.c src/kernel/floppy.c src/kernel/idt.c src/kernel/thread.c src/scheme/scheme.c
+KERNEL_OBJS := $(BUILD)/entry.o $(BUILD)/isr.o $(BUILD)/context.o $(BUILD)/kernel.o $(BUILD)/console.o $(BUILD)/floppy.o $(BUILD)/ata.o $(BUILD)/idt.o $(BUILD)/mem.o $(BUILD)/thread.o $(BUILD)/scheme.o
 KERNEL_ELF := $(BUILD)/kernel.elf
 KERNEL_BIN := $(BUILD)/kernel.bin
 
@@ -50,6 +50,15 @@ $(BUILD)/console.o: src/kernel/console.c src/kernel/console.h | $(BUILD)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD)/idt.o: src/kernel/idt.c src/kernel/idt.h src/kernel/ports.h | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/mem.o: src/kernel/mem.c src/kernel/mem.h src/kernel/boot.h src/kernel/console.h | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/floppy.o: src/kernel/floppy.c src/kernel/floppy.h src/kernel/ports.h | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/ata.o: src/kernel/ata.c src/kernel/ata.h src/kernel/ports.h | $(BUILD)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD)/thread.o: src/kernel/thread.c src/kernel/thread.h src/kernel/ports.h | $(BUILD)
@@ -108,10 +117,10 @@ $(IMG): $(STAGE1) $(STAGE2) $(KERNEL_BIN) $(FSIMG) | $(BUILD)
 	dd if=$(FSIMG) of=$@ bs=512 seek=$$ramdisk_lba conv=notrunc
 
 run: $(IMG)
-	$(QEMU) -drive if=floppy,format=raw,file=$(IMG) -display none -serial stdio -monitor none
+	$(QEMU) -drive if=floppy,format=raw,file=$(IMG) -drive if=ide,format=raw,file=$(FSIMG) -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 run-echo: $(BUILD)/os_echo.img
-	@python3 - <<-'PY' | $(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_echo.img -display none -serial stdio -monitor none
+	@python3 - <<-'PY' | $(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_echo.img -drive if=ide,format=raw,file=$(BUILD)/fs_echo.img -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04
 	import sys
 	import time
 	time.sleep(0.2)
@@ -149,7 +158,7 @@ run-init:
 		exit 1; \
 	fi; \
 	$(MAKE) $(BUILD)/os_$$name.img; \
-	$(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_$$name.img -display none -serial stdio -monitor none
+	$(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_$$name.img -drive if=ide,format=raw,file=$(BUILD)/fs_$$name.img -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 scheme-host: src/scheme_host/main.c src/scheme/scheme.c src/scheme/scheme.h | $(BUILD)
 	gcc -O2 -Wall -Wextra -I src -o $(BUILD)/scheme-host src/scheme_host/main.c src/scheme/scheme.c

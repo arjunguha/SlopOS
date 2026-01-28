@@ -1,0 +1,6 @@
+(define t1 (spawn-thread "(begin (display 'thread1) (newline) (yield) (display 't1done) (newline))"))
+(define t2 (spawn-thread "(begin (display 'thread2) (newline) (yield) (display 't2done) (newline))"))
+(display t1)
+(newline)
+(display t2)
+(newline)

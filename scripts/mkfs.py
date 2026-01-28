@@ -7,6 +7,8 @@ MAGIC = b"SLOPFS1\0"
 VERSION = 1
 ENTRY_NAME_LEN = 64
 ENTRY_SIZE = 64 + 4 + 4 + 4
+DIR_ENTRIES = 64
+MIN_IMAGE_SIZE = 64 * 1024
 SUPERBLOCK_SIZE = 512
 BOOT_HEADER_SIZE = 8
 
@@ -49,7 +51,10 @@ def main():
 
     fs_offset = align(BOOT_HEADER_SIZE + boot_len, 512)
     dir_offset = fs_offset + SUPERBLOCK_SIZE
-    dir_length = len(files) * ENTRY_SIZE
+    if len(files) > DIR_ENTRIES:
+        print(f"error: too many files (max {DIR_ENTRIES})", file=sys.stderr)
+        return 1
+    dir_length = DIR_ENTRIES * ENTRY_SIZE
     data_offset = align(dir_offset + dir_length, 512)
 
     file_entries = []
@@ -60,7 +65,7 @@ def main():
         file_entries.append((name, data_cursor, len(data), data))
         data_cursor += len(data)
 
-    total_size = align(data_cursor, 512)
+    total_size = max(align(data_cursor, 512), MIN_IMAGE_SIZE)
     img = bytearray(total_size)
 
     struct.pack_into("<II", img, 0, boot_len, fs_offset)
@@ -76,6 +81,8 @@ def main():
         img[dir_pos:dir_pos + ENTRY_NAME_LEN] = name_field
         struct.pack_into("<III", img, dir_pos + ENTRY_NAME_LEN, data_off - fs_offset, data_len, 0)
         dir_pos += ENTRY_SIZE
+
+    # Remaining directory entries are zeroed (already zero in img).
 
     for _, data_off, _, data in file_entries:
         img[data_off:data_off + len(data)] = data

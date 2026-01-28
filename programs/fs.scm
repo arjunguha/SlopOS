@@ -38,6 +38,97 @@
           (disk-read-bytes (car info) (cadr info))
           #f)))
 
+  (define (string->list s)
+    (define (loop i acc)
+      (if (< i 0)
+          acc
+          (loop (- i 1) (cons (string-ref s i) acc))))
+    (loop (- (string-length s) 1) '()))
+
+  (define (append a b)
+    (if (null? a)
+        b
+        (cons (car a) (append (cdr a) b))))
+
+  (define (make-filled-string n ch)
+    (define (loop i acc)
+      (if (< i 1)
+          (list->string acc)
+          (loop (- i 1) (cons ch acc))))
+    (loop n '()))
+
+  (define (write-bytes off s)
+    (disk-write-bytes off s))
+
+  (define (write-u32 off v)
+    (define (b n) (int->char (modulo n 256)))
+    (write-bytes off (list->string (list (b v)
+                                         (b (quotient v 256))
+                                         (b (quotient v 65536))
+                                         (b (quotient v 16777216))))))
+
+  (define (write-dir-entry off name data-off len)
+    (define name-list (string->list name))
+    (define pad-len (- 64 (string-length name)))
+    (define padded (append name-list (string->list (make-filled-string pad-len (int->char 0)))))
+    (write-bytes off (list->string padded))
+    (write-u32 (+ off 64) data-off)
+    (write-u32 (+ off 68) len)
+    (write-u32 (+ off 72) 0))
+
+  (define (clear-dir-entry off)
+    (write-bytes off (make-filled-string 76 (int->char 0))))
+
+  (define (find-empty-entry off)
+    (if (< off dir-limit)
+        (if (string=? (disk-read-cstring off 1) "")
+            off
+            (find-empty-entry (+ off 76)))
+        #f))
+
+  (define (data-end off current)
+    (if (< off dir-limit)
+        (begin
+          (define name (disk-read-cstring off 64))
+          (if (string=? name "")
+              (data-end (+ off 76) current)
+              (begin
+                (define data-off (u32 (+ off 64)))
+                (define len (u32 (+ off 68)))
+                (define end (+ data-off len))
+                (data-end (+ off 76) (if (< current end) end current)))))
+        current))
+
+  (define (create-file name contents)
+    (begin
+      (define existing (find-file name))
+      (if existing
+          (delete-file name)
+          0)
+      (define entry (find-empty-entry dir-off))
+      (if (not entry)
+          (begin (display "no free dir slots") (newline) #f)
+          (begin
+            (define end (data-end dir-off 0))
+            (define len (string-length contents))
+            (define abs-off (+ fs-offset end))
+            (if (> (+ end len) (disk-size))
+                (begin (display "disk full") (newline) #f)
+                (begin
+                  (write-bytes abs-off contents)
+                  (write-dir-entry entry name end len)
+                  #t))))))
+
+  (define (delete-file name)
+    (begin
+      (define info (find-file name))
+      (if info
+          (begin
+            (define off (car info))
+            (clear-dir-entry (- off 64))
+            #t)
+          #f)))
+
   ; Reverse a list (used by read-string).
   (define (reverse-list xs)
     (define (rev xs acc)
@@ -60,31 +151,7 @@
   (define (bind name value rest) (cons (cons name value) rest))
 
   ; Allowed bindings for init scripts; eval-scoped restricts the environment.
-  (define allowed
-    (bind 'display display
-      (bind 'newline newline
-        (bind '+ +
-          (bind '- -
-            (bind '* *
-              (bind '< <
-                (bind '= =
-                  (bind 'cons cons
-                    (bind 'car car
-                      (bind 'cdr cdr
-                        (bind 'null? null?
-                          (bind 'pair? pair?
-                            (bind 'eq? eq?
-                              (bind 'string-length string-length
-                                (bind 'string-ref string-ref
-                                  (bind 'string=? string=?
-                                    (bind 'char=? char=?
-                                      (bind 'list-alloc list-alloc
-                                        (bind 'list->string list->string
-                                          (bind 'read-char read-char
-                                            (bind 'read-string read-string
-                                              (bind 'eval-string eval-string
-                                                (bind 'read-text-file read-text-file
-                                                  '()))))))))))))))))))))))))
+  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'eval-string eval-string (bind 'read-text-file read-text-file '()))))))))))))))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)
@@ -92,4 +159,5 @@
       (define info (find-file name))
       (if info
           (eval-scoped allowed (disk-read-bytes (car info) (cadr info)))
-          (begin (display "missing file: ") (display name) (newline))))))
+          (begin (display "missing file: ") (display name) (newline)))))
+)

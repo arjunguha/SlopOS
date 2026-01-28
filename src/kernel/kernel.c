@@ -1,20 +1,27 @@
 #include "boot.h"
 #include "console.h"
+#include "floppy.h"
+#include "ata.h"
 #include "idt.h"
+#include "mem.h"
 #include "ports.h"
 #include "scheme/scheme.h"
 #include "thread.h"
 
 static void acpi_shutdown(void) {
-    /* QEMU ACPI poweroff */
+    outb(0xF4, 0x00);
     outw(0x604, 0x2000);
     outw(0xB004, 0x2000);
+    for (;;) {
+        __asm__ volatile ("hlt");
+    }
 }
 
-static int scheme_spawn_program(int program_id);
+static int scheme_spawn_program(void *user, const char *code);
 
 static unsigned char *ramdisk_base;
 static unsigned int ramdisk_size;
+static unsigned int ramdisk_lba;
 
 static void scheme_putc(char c) {
     console_putc(c);
@@ -54,9 +61,6 @@ static int scheme_foreign_call(const char *name, int argc, const int *argv) {
         return -1;
     }
     if (name[0] == 's' && name[1] == 'p' && name[2] == 'a' && name[3] == 'w' && name[4] == 'n' && name[5] == '\0') {
-        if (argc >= 1) {
-            return scheme_spawn_program(argv[0]);
-        }
         return -1;
     }
     return -1;
@@ -83,6 +87,33 @@ static int scheme_read_char(void *user) {
     return (unsigned char)console_getc();
 }
 
+static int scheme_write_bytes(void *user, int offset, const char *data, int len) {
+    (void)user;
+    if (offset < 0 || len < 0) {
+        return -1;
+    }
+    unsigned int end = (unsigned int)offset + (unsigned int)len;
+    if (end > ramdisk_size) {
+        return -1;
+    }
+    for (int i = 0; i < len; i++) {
+        ramdisk_base[offset + i] = (unsigned char)data[i];
+    }
+    unsigned int start_sector = (unsigned int)offset / 512;
+    unsigned int end_sector = (end - 1) / 512;
+    static unsigned char sector_buf[512];
+    for (unsigned int s = start_sector; s <= end_sector; s++) {
+        unsigned int base = s * 512;
+        for (unsigned int i = 0; i < 512; i++) {
+            sector_buf[i] = ramdisk_base[base + i];
+        }
+        if (ata_write_sector_lba(s, sector_buf) < 0) {
+            return -1;
+        }
+    }
+    return len;
+}
+
 static unsigned int read_u32_le(const unsigned char *p) {
     return (unsigned int)p[0] |
            ((unsigned int)p[1] << 8) |
@@ -90,44 +121,52 @@ static unsigned int read_u32_le(const unsigned char *p) {
            ((unsigned int)p[3] << 24);
 }
 
+enum { SCHEME_HEAP_CELLS = 16384 };
+enum { SCHEME_SYM_BUF = 16384 };
+enum { SCHEME_STR_BUF = 65536 };
 typedef struct SchemeThreadCtx {
     Scheme sc;
-    Cell heap[2048];
-    char sym_buf[4096];
-    char str_buf[4096];
+    Cell *heap;
+    char *sym_buf;
+    char *str_buf;
     const char *program;
     int active;
 } SchemeThreadCtx;
 
 enum { MAX_SCHEME_THREADS = 4 };
-enum { SCHEME_PROGRAM_COUNT = 2 };
-
-static const char *scheme_programs[SCHEME_PROGRAM_COUNT] = {
-    // Simple cooperative Scheme programs used to exercise threads/FFI.
-    "(begin "
-    "  (define (loop n) "
-    "    (if (< n 1) 0 "
-    "        (begin (display 1) (newline) (foreign-call 'yield) (loop (- n 1))))) "
-    "  (loop 5))",
-    "(begin "
-    "  (define (loop n) "
-    "    (if (< n 1) 0 "
-    "        (begin (display 2) (newline) (foreign-call 'yield) (loop (- n 1))))) "
-    "  (loop 5))"
-};
 
 static SchemeThreadCtx scheme_threads[MAX_SCHEME_THREADS];
 
+static unsigned int str_len(const char *s) {
+    unsigned int n = 0;
+    while (s[n]) {
+        n++;
+    }
+    return n;
+}
+
+static int scheme_thread_alloc(SchemeThreadCtx *ctx) {
+    if (!ctx->heap) {
+        ctx->heap = (Cell *)kmalloc(sizeof(Cell) * SCHEME_HEAP_CELLS);
+        ctx->sym_buf = (char *)kmalloc(SCHEME_SYM_BUF);
+        ctx->str_buf = (char *)kmalloc(SCHEME_STR_BUF);
+    }
+    if (!ctx->heap || !ctx->sym_buf || !ctx->str_buf) {
+        console_write("scheme_thread_alloc: out of memory\n");
+        return -1;
+    }
+    return 0;
+}
+
 static void scheme_thread(void *arg) {
     SchemeThreadCtx *ctx = (SchemeThreadCtx *)arg;
-    // Each thread gets its own Scheme heap and buffers.
     SchemeConfig cfg;
     cfg.heap = ctx->heap;
-    cfg.heap_cells = sizeof(ctx->heap) / sizeof(ctx->heap[0]);
+    cfg.heap_cells = SCHEME_HEAP_CELLS;
     cfg.sym_buf = ctx->sym_buf;
-    cfg.sym_buf_size = sizeof(ctx->sym_buf);
+    cfg.sym_buf_size = SCHEME_SYM_BUF;
     cfg.str_buf = ctx->str_buf;
-    cfg.str_buf_size = sizeof(ctx->str_buf);
+    cfg.str_buf_size = SCHEME_STR_BUF;
     cfg.platform.user = NULL;
     cfg.platform.putc = scheme_putc;
     cfg.platform.panic = scheme_panic;
@@ -135,6 +174,8 @@ static void scheme_thread(void *arg) {
     cfg.platform.read_byte = scheme_read_byte;
     cfg.platform.disk_size = scheme_disk_size;
     cfg.platform.read_char = scheme_read_char;
+    cfg.platform.write_bytes = scheme_write_bytes;
+    cfg.platform.spawn_thread = scheme_spawn_program;
 
     scheme_init(&ctx->sc, &cfg);
     scheme_eval_string(&ctx->sc, ctx->program);
@@ -142,14 +183,28 @@ static void scheme_thread(void *arg) {
     thread_exit();
 }
 
-static int scheme_spawn_program(int program_id) {
-    if (program_id < 0 || program_id >= SCHEME_PROGRAM_COUNT) {
+static int scheme_spawn_program(void *user, const char *code) {
+    (void)user;
+    if (!code) {
         return -1;
     }
     for (int i = 0; i < MAX_SCHEME_THREADS; i++) {
         if (!scheme_threads[i].active) {
             scheme_threads[i].active = 1;
-            scheme_threads[i].program = scheme_programs[program_id];
+            if (scheme_thread_alloc(&scheme_threads[i]) < 0) {
+                scheme_threads[i].active = 0;
+                return -1;
+            }
+            unsigned int len = str_len(code);
+            char *copy = (char *)kmalloc(len + 1);
+            if (!copy) {
+                scheme_threads[i].active = 0;
+                return -1;
+            }
+            for (unsigned int j = 0; j <= len; j++) {
+                copy[j] = code[j];
+            }
+            scheme_threads[i].program = copy;
             if (thread_spawn(scheme_thread, &scheme_threads[i]) < 0) {
                 scheme_threads[i].active = 0;
                 return -1;
@@ -162,12 +217,16 @@ static int scheme_spawn_program(int program_id) {
 
 void kmain(void) {
     static const char boot_msg[] = "SlopOS booting...\n";
+    extern char __kernel_end;
     const BootInfo *info = boot_info();
     ramdisk_base = (unsigned char *)info->ramdisk_base;
     ramdisk_size = info->ramdisk_size;
+    ramdisk_lba = info->ramdisk_lba;
 
     console_init();
     console_write(boot_msg);
+
+    mem_init(info, (unsigned int)&__kernel_end);
 
     thread_init();
     pic_remap();
@@ -176,17 +235,23 @@ void kmain(void) {
     __asm__ volatile ("sti");
 
     // Main Scheme instance that runs boot.scm out of the ramdisk.
-    static Cell heap[4096];
-    static char sym_buf[8192];
-    static char str_buf[8192];
     Scheme sc;
     SchemeConfig cfg;
+    Cell *heap = (Cell *)kmalloc(sizeof(Cell) * SCHEME_HEAP_CELLS);
+    char *sym_buf = (char *)kmalloc(SCHEME_SYM_BUF);
+    char *str_buf = (char *)kmalloc(SCHEME_STR_BUF);
+    if (!heap || !sym_buf || !str_buf) {
+        console_write("kernel: scheme heap alloc failed\n");
+        for (;;) {
+            __asm__ volatile ("hlt");
+        }
+    }
     cfg.heap = heap;
-    cfg.heap_cells = sizeof(heap) / sizeof(heap[0]);
+    cfg.heap_cells = SCHEME_HEAP_CELLS;
     cfg.sym_buf = sym_buf;
-    cfg.sym_buf_size = sizeof(sym_buf);
+    cfg.sym_buf_size = SCHEME_SYM_BUF;
     cfg.str_buf = str_buf;
-    cfg.str_buf_size = sizeof(str_buf);
+    cfg.str_buf_size = SCHEME_STR_BUF;
     cfg.platform.user = NULL;
     cfg.platform.putc = scheme_putc;
     cfg.platform.panic = scheme_panic;
@@ -194,6 +259,8 @@ void kmain(void) {
     cfg.platform.read_byte = scheme_read_byte;
     cfg.platform.disk_size = scheme_disk_size;
     cfg.platform.read_char = scheme_read_char;
+    cfg.platform.write_bytes = scheme_write_bytes;
+    cfg.platform.spawn_thread = scheme_spawn_program;
 
     scheme_init(&sc, &cfg);
     static char boot_buf[4096];

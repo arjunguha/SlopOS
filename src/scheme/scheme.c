@@ -641,6 +641,28 @@ static Cell *prim_num_eq(Scheme *sc, Cell *args) {
     return make_bool(sc, a == b);
 }
 
+static Cell *prim_quotient(Scheme *sc, Cell *args) {
+    int a = car(args)->as.i;
+    int b = car(cdr(args))->as.i;
+    if (b == 0) {
+        panic(sc, "quotient: divide by zero");
+    }
+    return make_int(sc, a / b);
+}
+
+static Cell *prim_modulo(Scheme *sc, Cell *args) {
+    int a = car(args)->as.i;
+    int b = car(cdr(args))->as.i;
+    if (b == 0) {
+        panic(sc, "modulo: divide by zero");
+    }
+    int r = a % b;
+    if (r < 0) {
+        r += (b < 0) ? -b : b;
+    }
+    return make_int(sc, r);
+}
+
 static Cell *prim_cons(Scheme *sc, Cell *args) {
     Cell *a = car(args);
     Cell *d = car(cdr(args));
@@ -825,6 +847,20 @@ static int platform_read_char(Scheme *sc) {
     return sc->platform.read_char(sc->platform.user);
 }
 
+static int platform_write_bytes(Scheme *sc, int offset, const char *data, int len) {
+    if (!sc->platform.write_bytes) {
+        panic(sc, "disk-write-bytes: not supported");
+    }
+    return sc->platform.write_bytes(sc->platform.user, offset, data, len);
+}
+
+static int platform_spawn_thread(Scheme *sc, const char *code) {
+    if (!sc->platform.spawn_thread) {
+        panic(sc, "spawn-thread: not supported");
+    }
+    return sc->platform.spawn_thread(sc->platform.user, code);
+}
+
 static Cell *prim_disk_read_byte(Scheme *sc, Cell *args) {
     Cell *off = car(args);
     if (off->type != T_INT) {
@@ -892,6 +928,47 @@ static Cell *prim_disk_read_cstring(Scheme *sc, Cell *args) {
     return c;
 }
 
+// prim_disk_write_bytes: write a string to disk at an absolute offset.
+// Args: sc (interpreter state), args (offset int, string).
+// Returns: int cell with bytes written.
+static Cell *prim_disk_write_bytes(Scheme *sc, Cell *args) {
+    Cell *off = car(args);
+    Cell *data = car(cdr(args));
+    if (off->type != T_INT || data->type != T_STRING) {
+        panic(sc, "disk-write-bytes: expected int string");
+    }
+    int written = platform_write_bytes(sc, off->as.i, data->as.str.data, (int)data->as.str.len);
+    return make_int(sc, written);
+}
+
+// prim_spawn_thread: spawn a new Scheme thread to eval a string.
+// Args: sc (interpreter state), args (code string).
+// Returns: int cell with thread id or -1.
+static Cell *prim_spawn_thread(Scheme *sc, Cell *args) {
+    Cell *code = car(args);
+    if (code->type != T_STRING) {
+        panic(sc, "spawn-thread: expected string");
+    }
+    int tid = platform_spawn_thread(sc, code->as.str.data);
+    return make_int(sc, tid);
+}
+
+static Cell *prim_char_to_int(Scheme *sc, Cell *args) {
+    Cell *c = car(args);
+    if (c->type != T_CHAR) {
+        panic(sc, "char->int: expected char");
+    }
+    return make_int(sc, c->as.i);
+}
+
+static Cell *prim_int_to_char(Scheme *sc, Cell *args) {
+    Cell *v = car(args);
+    if (v->type != T_INT) {
+        panic(sc, "int->char: expected int");
+    }
+    return make_char(sc, v->as.i & 0xFF);
+}
+
 // prim_read_char: read a single character from the platform.
 // Args: sc (interpreter state), args (ignored).
 // Returns: one-character string.
@@ -899,6 +976,17 @@ static Cell *prim_read_char(Scheme *sc, Cell *args) {
     (void)args;
     int ch = platform_read_char(sc);
     return make_char(sc, ch);
+}
+
+// prim_yield: yield the current thread (cooperative scheduling).
+// Args: sc (interpreter state), args (ignored).
+// Returns: int cell (0).
+static Cell *prim_yield(Scheme *sc, Cell *args) {
+    (void)args;
+    if (sc->platform.foreign_call) {
+        sc->platform.foreign_call("yield", 0, NULL);
+    }
+    return make_int(sc, 0);
 }
 
 static Cell *prim_display(Scheme *sc, Cell *args) {
@@ -1028,6 +1116,8 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "*", prim_mul);
     add_prim(sc, "<", prim_lt);
     add_prim(sc, "=", prim_num_eq);
+    add_prim(sc, "quotient", prim_quotient);
+    add_prim(sc, "modulo", prim_modulo);
     add_prim(sc, "cons", prim_cons);
     add_prim(sc, "car", prim_car);
     add_prim(sc, "cdr", prim_cdr);
@@ -1038,6 +1128,8 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "string-ref", prim_string_ref);
     add_prim(sc, "string=?", prim_string_eq);
     add_prim(sc, "char=?", prim_char_eq);
+    add_prim(sc, "char->int", prim_char_to_int);
+    add_prim(sc, "int->char", prim_int_to_char);
     add_prim(sc, "list-alloc", prim_list_alloc);
     add_prim(sc, "list->string", prim_list_to_string);
     add_prim(sc, "eval-string", prim_eval_string);
@@ -1045,8 +1137,11 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "disk-read-byte", prim_disk_read_byte);
     add_prim(sc, "disk-read-bytes", prim_disk_read_bytes);
     add_prim(sc, "disk-read-cstring", prim_disk_read_cstring);
+    add_prim(sc, "disk-write-bytes", prim_disk_write_bytes);
     add_prim(sc, "disk-size", prim_disk_size);
     add_prim(sc, "read-char", prim_read_char);
+    add_prim(sc, "spawn-thread", prim_spawn_thread);
+    add_prim(sc, "yield", prim_yield);
     add_prim(sc, "display", prim_display);
     add_prim(sc, "newline", prim_newline);
     add_prim(sc, "foreign-call", prim_foreign_call);

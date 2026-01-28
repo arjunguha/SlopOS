@@ -12,6 +12,10 @@ INIT_NAME="$(basename "$INIT_PATH" .scm)"
 BUILD_DIR="$ROOT_DIR/build"
 MKFS="$ROOT_DIR/scripts/mkfs.py"
 QEMU="${QEMU:-qemu-system-i386}"
+SNAPSHOT_FLAG="-snapshot"
+if [[ "${SLOPOS_NO_SNAPSHOT:-}" == "1" ]]; then
+  SNAPSHOT_FLAG=""
+fi
 
 if ! command -v i386-elf-gcc >/dev/null 2>&1; then
   if [[ -x "$HOME/opt/cross/bin/i386-elf-gcc" ]]; then
@@ -35,7 +39,7 @@ python3 "$MKFS" "$TMP_DIR" "$FS_IMG"
 make -C "$ROOT_DIR" -s build/kernel.bin
 rm -f "$BUILD_DIR/stage2.bin"
 make -C "$ROOT_DIR" -s FSIMG="$FS_IMG" build/stage2.bin
-make -C "$ROOT_DIR" -s build/stage1.bin
+make -C "$ROOT_DIR" -s FSIMG="$FS_IMG" build/stage1.bin
 
 kernel_bytes=$(stat -c%s "$BUILD_DIR/kernel.bin")
 kernel_sectors=$(( (kernel_bytes + 511) / 512 ))
@@ -61,7 +65,73 @@ if [[ ! -t 0 ]]; then
 fi
 
 if [[ -z "${INPUT_FILE}" || ! -s "$INPUT_FILE" ]]; then
-  exec "$QEMU" -drive if=floppy,format=raw,file="$IMG" -snapshot -display none -serial stdio -monitor none
+  set +e
+  "$QEMU" -drive if=floppy,format=raw,file="$IMG" -drive if=ide,format=raw,file="$FS_IMG" $SNAPSHOT_FLAG -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04
+  exit 0
 fi
 
-{ sleep 1; cat "$INPUT_FILE"; } | "$QEMU" -drive if=floppy,format=raw,file="$IMG" -snapshot -display none -serial stdio -monitor none
+python3 - "$INPUT_FILE" "$QEMU" "$IMG" "$FS_IMG" "$SNAPSHOT_FLAG" <<'PY'
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+import tty
+
+input_path = sys.argv[1]
+qemu = sys.argv[2]
+img = sys.argv[3]
+fs_img = sys.argv[4]
+snapshot_flag = sys.argv[5]
+
+args = [
+    qemu,
+    "-drive", f"if=floppy,format=raw,file={img}",
+    "-drive", f"if=ide,format=raw,file={fs_img}",
+    "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
+]
+if snapshot_flag:
+    args.append(snapshot_flag)
+args += [
+    "-display", "none",
+    "-serial", "stdio",
+    "-monitor", "none",
+]
+
+with open(input_path, "rb") as f:
+    data = f.read()
+
+master_fd, slave_fd = pty.openpty()
+tty.setraw(slave_fd)
+proc = subprocess.Popen(args, stdin=slave_fd, stdout=slave_fd, stderr=None)
+os.close(slave_fd)
+
+time.sleep(0.2)
+os.write(master_fd, data)
+
+output = bytearray()
+start = time.time()
+while True:
+    if proc.poll() is not None:
+        ready, _, _ = select.select([master_fd], [], [], 0.1)
+        if not ready:
+            break
+    ready, _, _ = select.select([master_fd], [], [], 0.1)
+    if ready:
+        try:
+            chunk = os.read(master_fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        output.extend(chunk)
+    if time.time() - start > 15:
+        proc.kill()
+        break
+
+sys.stdout.buffer.write(output)
+os.close(master_fd)
+PY
+
+exit 0
