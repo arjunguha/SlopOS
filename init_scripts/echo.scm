@@ -1,0 +1,2 @@
+(display (read-string))
+(newline)

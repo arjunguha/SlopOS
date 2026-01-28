@@ -20,6 +20,7 @@ typedef enum {
     T_NIL,
     T_BOOL,
     T_INT,
+    T_CHAR,
     T_STRING,
     T_SYMBOL,
     T_PAIR,
@@ -60,6 +61,7 @@ typedef void (*scheme_panic_fn)(const char *msg);
 typedef int (*scheme_foreign_call_fn)(const char *name, int argc, const int *argv);
 typedef int (*scheme_read_byte_fn)(void *user, int offset);
 typedef int (*scheme_disk_size_fn)(void *user);
+typedef int (*scheme_read_char_fn)(void *user);
 
 typedef struct SchemePlatform {
     void *user;
@@ -68,6 +70,7 @@ typedef struct SchemePlatform {
     scheme_foreign_call_fn foreign_call;
     scheme_read_byte_fn read_byte;
     scheme_disk_size_fn disk_size;
+    scheme_read_char_fn read_char;
 } SchemePlatform;
 
 typedef struct Scheme {

@@ -21,29 +21,6 @@
   (define dir-len (u32 (+ sb 16)))
   (define dir-limit (+ dir-off dir-len))
 
-  ; Allowed bindings for init scripts; eval-scoped restricts the environment.
-  (define allowed
-    (cons (cons 'display display)
-      (cons (cons 'newline newline)
-        (cons (cons '+ +)
-          (cons (cons '- -)
-        (cons (cons '* *)
-          (cons (cons '< <)
-            (cons (cons '= =)
-              (cons (cons 'cons cons)
-                (cons (cons 'car car)
-                  (cons (cons 'cdr cdr)
-                    (cons (cons 'null? null?)
-                      (cons (cons 'pair? pair?)
-                        (cons (cons 'eq? eq?)
-                          (cons (cons 'string-length string-length)
-                            (cons (cons 'string-ref string-ref)
-                              (cons (cons 'string=? string=?)
-                                (cons (cons 'list-alloc list-alloc)
-                                  (cons (cons 'eval-string eval-string)
-                                    (cons (cons 'read-text-file read-text-file)
-                                      '()))))))))))))))))))))
-
   ; Find a file by name in the flat directory table.
   (define (find-file-loop name off)
     (if (< off dir-limit)
@@ -61,6 +38,52 @@
       (if info
           (disk-read-bytes (car info) (cadr info))
           #f)))
+
+  ; Reverse a list (used by read-string).
+  (define (reverse-list xs)
+    (define (rev xs acc)
+      (if (null? xs)
+          acc
+          (rev (cdr xs) (cons (car xs) acc))))
+    (rev xs '()))
+
+  ; Read a line from serial input and return a string.
+  (define (read-string)
+    (define (loop acc)
+      (define ch (read-char))
+      (if (char=? ch #\newline)
+          (list->string (reverse-list acc))
+          (if (char=? ch #\return)
+              (list->string (reverse-list acc))
+              (loop (cons ch acc)))))
+    (loop '()))
+
+  ; Allowed bindings for init scripts; eval-scoped restricts the environment.
+  (define allowed
+    (cons (cons 'display display)
+      (cons (cons 'newline newline)
+        (cons (cons '+ +)
+          (cons (cons '- -)
+            (cons (cons '* *)
+              (cons (cons '< <)
+                (cons (cons '= =)
+                  (cons (cons 'cons cons)
+                    (cons (cons 'car car)
+                      (cons (cons 'cdr cdr)
+                        (cons (cons 'null? null?)
+                          (cons (cons 'pair? pair?)
+                            (cons (cons 'eq? eq?)
+                              (cons (cons 'string-length string-length)
+                                (cons (cons 'string-ref string-ref)
+                                  (cons (cons 'string=? string=?)
+                                    (cons (cons 'char=? char=?)
+                                      (cons (cons 'list-alloc list-alloc)
+                                      (cons (cons 'list->string list->string)
+                                        (cons (cons 'read-char read-char)
+                                          (cons (cons 'read-string read-string)
+                                            (cons (cons 'eval-string eval-string)
+                                              (cons (cons 'read-text-file read-text-file)
+                                                '())))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)
