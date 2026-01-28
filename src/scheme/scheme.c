@@ -67,13 +67,31 @@ static void mark_cell(Scheme *sc, Cell *c) {
     }
 }
 
-// gc_collect: mark-and-sweep collector using global env, interned symbols, and root stack.
+static void env_stack_push(Scheme *sc, Cell *env) {
+    if (sc->env_top >= 256) {
+        panic(sc, "env stack overflow");
+    }
+    sc->env_stack[sc->env_top++] = env;
+}
+
+static void env_stack_pop(Scheme *sc) {
+    if (sc->env_top == 0) {
+        panic(sc, "env stack underflow");
+    }
+    sc->env_top--;
+}
+
+// gc_collect: mark-and-sweep collector using global env, active envs, interned symbols, and root stack.
 // Args: sc (interpreter state).
 // Returns: none.
 static void gc_collect(Scheme *sc) {
     size_t i;
 
     mark_cell(sc, sc->global_env);
+    mark_cell(sc, sc->current_env);
+    for (i = 0; i < sc->env_top; i++) {
+        mark_cell(sc, sc->env_stack[i]);
+    }
     mark_cell(sc, sc->interned_syms);
     for (i = 0; i < sc->root_top; i++) {
         mark_cell(sc, sc->root_stack[i]);
@@ -164,7 +182,11 @@ static Cell *make_prim(Scheme *sc, PrimFn fn) {
 }
 
 static Cell *make_closure(Scheme *sc, Cell *params, Cell *body, Cell *env) {
+    push_root(sc, params);
+    push_root(sc, body);
+    push_root(sc, env);
     Cell *c = alloc_cell(sc);
+    pop_roots(sc, 3);
     c->type = T_CLOSURE;
     c->as.closure.params = params;
     c->as.closure.body = body;
@@ -463,6 +485,11 @@ static Cell *eval_list(Scheme *sc, Cell *list, Cell *env) {
     Cell *head = NULL;
     Cell *tail = NULL;
     while (!is_nil(sc, list)) {
+        int pushed_head = 0;
+        if (head) {
+            push_root(sc, head);
+            pushed_head = 1;
+        }
         Cell *val = eval(sc, car(list), env);
         push_root(sc, val);
         Cell *node = cons(sc, val, scheme_nil(sc));
@@ -473,7 +500,7 @@ static Cell *eval_list(Scheme *sc, Cell *list, Cell *env) {
             tail->as.pair.cdr = node;
             tail = node;
         }
-        pop_roots(sc, 1);
+        pop_roots(sc, pushed_head ? 2 : 1);
         list = cdr(list);
     }
     return head ? head : scheme_nil(sc);
@@ -484,10 +511,19 @@ static Cell *eval_list(Scheme *sc, Cell *list, Cell *env) {
 // Returns: result cell.
 static Cell *apply(Scheme *sc, Cell *fn, Cell *args) {
     if (fn->type == T_PRIMITIVE) {
-        return fn->as.prim.fn(sc, args);
+        push_root(sc, fn);
+        push_root(sc, args);
+        Cell *result = fn->as.prim.fn(sc, args);
+        pop_roots(sc, 2);
+        return result;
     }
     if (fn->type == T_CLOSURE) {
+        push_root(sc, fn);
+        push_root(sc, args);
         Cell *new_env = cons(sc, scheme_nil(sc), fn->as.closure.env);
+        Cell *prev_env = sc->current_env;
+        sc->current_env = new_env;
+        env_stack_push(sc, new_env);
         Cell *params = fn->as.closure.params;
         Cell *vals = args;
         while (!is_nil(sc, params) && !is_nil(sc, vals)) {
@@ -495,12 +531,16 @@ static Cell *apply(Scheme *sc, Cell *fn, Cell *args) {
             params = cdr(params);
             vals = cdr(vals);
         }
+        pop_roots(sc, 1);
         Cell *body = fn->as.closure.body;
         Cell *result = scheme_nil(sc);
         while (!is_nil(sc, body)) {
             result = eval(sc, car(body), new_env);
             body = cdr(body);
         }
+        env_stack_pop(sc);
+        sc->current_env = prev_env;
+        pop_roots(sc, 1);
         return result;
     }
     panic(sc, "attempt to call non-function");
@@ -515,6 +555,7 @@ static int is_symbol(Cell *c, const char *name) {
 // Args: sc (interpreter state), expr (expression), env (environment).
 // Returns: result cell.
 static Cell *eval(Scheme *sc, Cell *expr, Cell *env) {
+    sc->current_env = env;
     if (!expr) {
         return scheme_nil(sc);
     }
@@ -1093,6 +1134,7 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     sc->str_buf_used = 0;
     sc->platform = cfg->platform;
     sc->root_top = 0;
+    sc->env_top = 0;
 
     sc->nil_cell.type = T_NIL;
     sc->true_cell.type = T_BOOL;
@@ -1110,6 +1152,7 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
 
     sc->interned_syms = scheme_nil(sc);
     sc->global_env = cons(sc, scheme_nil(sc), scheme_nil(sc));
+    sc->current_env = sc->global_env;
 
     add_prim(sc, "+", prim_add);
     add_prim(sc, "-", prim_sub);
@@ -1159,7 +1202,9 @@ static int eval_string_in_env(Scheme *sc, const char *input, Cell *env) {
         if (!expr) {
             break;
         }
+        push_root(sc, expr);
         eval(sc, expr, env);
+        pop_roots(sc, 1);
         count++;
     }
     return count;

@@ -108,7 +108,13 @@ proc = subprocess.Popen(args, stdin=slave_fd, stdout=slave_fd, stderr=None)
 os.close(slave_fd)
 
 time.sleep(0.2)
-os.write(master_fd, data)
+slow = os.environ.get("SLOPOS_SLOW_INPUT") == "1"
+if slow:
+    for b in data:
+        os.write(master_fd, bytes([b]))
+        time.sleep(0.01)
+else:
+    os.write(master_fd, data)
 
 output = bytearray()
 start = time.time()

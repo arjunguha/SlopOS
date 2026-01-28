@@ -32,6 +32,20 @@ static int ata_wait_not_busy(void) {
     return -1;
 }
 
+static int ata_wait_ready_clear(void) {
+    unsigned char status;
+    for (unsigned int i = 0; i < 1000000; i++) {
+        status = inb(ATA_STATUS);
+        if (status & ATA_SR_ERR) {
+            return -1;
+        }
+        if ((status & ATA_SR_BSY) == 0 && (status & ATA_SR_DRQ) == 0) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int ata_wait_drq(void) {
     unsigned char status;
     for (unsigned int i = 0; i < 1000000; i++) {
@@ -47,12 +61,12 @@ static int ata_wait_drq(void) {
 }
 
 int ata_write_sector_lba(unsigned int lba, const unsigned char *data) {
-    if (ata_wait_not_busy() < 0) {
+    if (ata_wait_ready_clear() < 0) {
         return -1;
     }
     outb(ATA_DRIVE, (unsigned char)(0xE0 | ((lba >> 24) & 0x0F)));
     ata_io_delay();
-    if (ata_wait_not_busy() < 0) {
+    if (ata_wait_ready_clear() < 0) {
         return -1;
     }
     outb(ATA_SECTOR_COUNT, 1);

@@ -57,5 +57,5 @@ dd if="$FS_IMG" of="$BOOT_IMG" bs=512 seek=$ramdisk_lba conv=notrunc status=none
 
 echo "Built $BOOT_IMG"
 echo "Built $FS_IMG"
-echo "Run:"
-echo "qemu-system-i386 -drive if=floppy,format=raw,file=$BOOT_IMG -drive if=ide,format=raw,file=$FS_IMG -display none -serial stdio -monitor none"
+echo "Run (raw tty so Ctrl-D reaches the shell):"
+echo "stty raw -echo; qemu-system-i386 -drive if=floppy,format=raw,file=$BOOT_IMG -drive if=ide,format=raw,file=$FS_IMG -display none -serial stdio -monitor none; stty sane"

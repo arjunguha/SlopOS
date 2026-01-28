@@ -18,6 +18,7 @@
   ; Superblock fields are relative to fs-offset.
   (define dir-off (+ fs-offset (u32 (+ sb 12))))
   (define dir-len (u32 (+ sb 16)))
+  (define data-off (u32 (+ sb 20)))
   (define dir-limit (+ dir-off dir-len))
 
   ; Find a file by name in the flat directory table.
@@ -121,10 +122,10 @@
       (if (not entry)
           (begin (display "no free dir slots") (newline) #f)
           (begin
-            (define end (data-end dir-off 0))
+            (define end (data-end dir-off data-off))
             (define len (string-length contents))
             (define abs-off (+ fs-offset end))
-            (if (> (+ end len) (disk-size))
+            (if (> (+ abs-off len) (disk-size))
                 (begin (display "disk full") (newline) #f)
                 (begin
                   (write-bytes abs-off contents)

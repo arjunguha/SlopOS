@@ -8,10 +8,18 @@ ROOT = Path(__file__).resolve().parent.parent
 TEST_SH = ROOT / "test.sh"
 
 
-def run_init(path: Path, input_text: str = "", snapshot: bool = True) -> str:
+def run_init(
+    path: Path,
+    input_text: str = "",
+    snapshot: bool = True,
+    timeout: int = 15,
+    slow_input: bool = False,
+) -> str:
     env = os.environ.copy()
     if not snapshot:
         env["SLOPOS_NO_SNAPSHOT"] = "1"
+    if slow_input:
+        env["SLOPOS_SLOW_INPUT"] = "1"
     proc = subprocess.run(
         [str(TEST_SH), str(path)],
         cwd=str(ROOT),
@@ -19,7 +27,7 @@ def run_init(path: Path, input_text: str = "", snapshot: bool = True) -> str:
         stdout=subprocess.PIPE,
         stderr=None,
         check=True,
-        timeout=15,
+        timeout=timeout,
         env=env,
     )
     out = proc.stdout.decode(errors="replace")
@@ -99,3 +107,22 @@ def test_list_files():
     assert "SlopOS booting..." in out
     assert "fs.scm" in out
     assert "init.scm" in out
+
+
+def test_shell_create_two_files():
+    input_text = "\n".join(
+        [
+            "create foo.txt",
+            "hello",
+            "EOF",
+            "create bar.txt",
+            "world",
+            "EOF",
+            "ls",
+            "exit",
+            "",
+        ]
+    )
+    out = run_init(ROOT / "init_scripts" / "shell.scm", input_text, timeout=10, slow_input=True)
+    assert "foo.txt" in out
+    assert "bar.txt" in out

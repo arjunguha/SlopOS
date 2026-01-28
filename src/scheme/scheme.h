@@ -95,7 +95,11 @@ typedef struct Scheme {
     Cell *root_stack[256];
     size_t root_top;
 
+    Cell *env_stack[256];
+    size_t env_top;
+
     Cell *global_env;
+    Cell *current_env;
 
     SchemePlatform platform;
 
