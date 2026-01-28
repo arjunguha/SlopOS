@@ -58,6 +58,12 @@ dd if="$BUILD_DIR/stage2.bin" of="$IMG" bs=512 seek=1 conv=notrunc status=none
 dd if="$BUILD_DIR/kernel.bin" of="$IMG" bs=512 seek=$kernel_lba conv=notrunc status=none
 dd if="$FS_IMG" of="$IMG" bs=512 seek=$ramdisk_lba conv=notrunc status=none
 
+if [[ "${SLOPOS_BUILD_ONLY:-}" == "1" ]]; then
+  echo "IMG=$IMG"
+  echo "FS_IMG=$FS_IMG"
+  exit 0
+fi
+
 INPUT_FILE=""
 if [[ ! -t 0 ]]; then
   INPUT_FILE="$(mktemp)"
