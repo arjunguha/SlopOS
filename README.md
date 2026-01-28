@@ -55,6 +55,8 @@ Galactica.
 
 ## How It Actually Went
 
+[Full Chat Transcript](https://tools.simonwillison.net/codex-timeline?url=https%3A%2F%2Fgist.githubusercontent.com%2Farjunguha%2Fa5ce099c07de800a5d2f4c729f2580cc%2Fraw%2Fb072baa8f9262bb6037a92832e83cfca758c806b%2Fslopos.jsonl#tz=local&q=user&type=all&payload=message&role=user&hide=1&truncate=1&sel=5)
+
 In any good operating systems course, you build your own operating system.
 Although I didn't formally study OS, I've always been interested in systems, and
 I tried to remedy this by working through Tanenbaum's textbook. I don't remember
