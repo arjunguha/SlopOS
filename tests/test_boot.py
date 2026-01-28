@@ -92,3 +92,10 @@ def test_create_file_persists():
     fs_img = ROOT / "build" / "test_write_in_fs.img"
     contents = _read_file_from_fs(fs_img, "input.txt")
     assert contents == "Slopcoder 2000"
+
+
+def test_list_files():
+    out = run_init(ROOT / "init_scripts" / "list_files.scm")
+    assert "SlopOS booting..." in out
+    assert "fs.scm" in out
+    assert "init.scm" in out

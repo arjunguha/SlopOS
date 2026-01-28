@@ -30,6 +30,18 @@
 
   (define (find-file name) (find-file-loop name dir-off))
 
+  ; List all filenames in the directory table.
+  (define (list-files)
+    (define (loop off acc)
+      (if (< off dir-limit)
+          (begin
+            (define name (disk-read-cstring off 64))
+            (if (string=? name "")
+                (loop (+ off 76) acc)
+                (loop (+ off 76) (cons name acc))))
+          acc))
+    (reverse-list (loop dir-off '())))
+
   ; Load an entire file as a string; return #f if missing.
   (define (read-text-file name)
     (begin
@@ -154,7 +166,7 @@
   (define (not x) (eq? x #f))
   (define (> a b) (< b a))
 
-  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '> > (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'not not (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'eval-string eval-string (bind 'read-text-file read-text-file '()))))))))))))))))))))))))))))))))))))
+  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '> > (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'not not (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'list-files list-files (bind 'eval-string eval-string (bind 'read-text-file read-text-file '())))))))))))))))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)
