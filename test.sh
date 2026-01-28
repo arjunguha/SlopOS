@@ -27,11 +27,15 @@ TMP_DIR="$BUILD_DIR/test_${INIT_NAME}_programs"
 mkdir -p "$TMP_DIR"
 
 cp "$ROOT_DIR/programs/boot.scm" "$TMP_DIR/boot.scm"
+cp "$ROOT_DIR/programs/fs.scm" "$TMP_DIR/fs.scm"
 cp "$INIT_PATH" "$TMP_DIR/init.scm"
 FS_IMG="$BUILD_DIR/test_${INIT_NAME}_fs.img"
 python3 "$MKFS" "$TMP_DIR" "$FS_IMG"
 
-make -C "$ROOT_DIR" -s build/kernel.bin build/stage1.bin build/stage2.bin
+make -C "$ROOT_DIR" -s build/kernel.bin
+rm -f "$BUILD_DIR/stage2.bin"
+make -C "$ROOT_DIR" -s FSIMG="$FS_IMG" build/stage2.bin
+make -C "$ROOT_DIR" -s build/stage1.bin
 
 kernel_bytes=$(stat -c%s "$BUILD_DIR/kernel.bin")
 kernel_sectors=$(( (kernel_bytes + 511) / 512 ))
@@ -50,13 +54,14 @@ dd if="$BUILD_DIR/stage2.bin" of="$IMG" bs=512 seek=1 conv=notrunc status=none
 dd if="$BUILD_DIR/kernel.bin" of="$IMG" bs=512 seek=$kernel_lba conv=notrunc status=none
 dd if="$FS_IMG" of="$IMG" bs=512 seek=$ramdisk_lba conv=notrunc status=none
 
-INPUT_DATA=""
+INPUT_FILE=""
 if [[ ! -t 0 ]]; then
-  INPUT_DATA="$(cat)"
+  INPUT_FILE="$(mktemp)"
+  cat > "$INPUT_FILE"
 fi
 
-if [[ -z "$INPUT_DATA" ]]; then
-  exec "$QEMU" -drive if=floppy,format=raw,file="$IMG" -display none -serial stdio -monitor none
+if [[ -z "${INPUT_FILE}" || ! -s "$INPUT_FILE" ]]; then
+  exec "$QEMU" -drive if=floppy,format=raw,file="$IMG" -snapshot -display none -serial stdio -monitor none
 fi
 
-{ sleep 1; printf "%s" "$INPUT_DATA"; } | "$QEMU" -drive if=floppy,format=raw,file="$IMG" -display none -serial stdio -monitor none
+{ sleep 1; cat "$INPUT_FILE"; } | "$QEMU" -drive if=floppy,format=raw,file="$IMG" -snapshot -display none -serial stdio -monitor none

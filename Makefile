@@ -6,9 +6,7 @@ STAGE2 := $(BUILD)/stage2.bin
 IMG := $(BUILD)/os.img
 FS_DIR := programs
 FSIMG := $(BUILD)/fs.img
-FSIMG_INIT := $(BUILD)/fs_init.img
 INIT_DIR := init_scripts
-DEFAULT_INIT := default
 INIT_SCRIPTS := $(shell find $(INIT_DIR) -type f -name "*.scm" 2>/dev/null)
 INIT_NAMES := $(basename $(notdir $(INIT_SCRIPTS)))
 MKFS := scripts/mkfs.py
@@ -66,10 +64,15 @@ $(KERNEL_ELF): $(KERNEL_OBJS) linker.ld | $(BUILD)
 $(KERNEL_BIN): $(KERNEL_ELF) | $(BUILD)
 	$(OBJCOPY) -O binary $< $@
 
-$(FSIMG): $(MKFS) $(FS_DIR)/boot.scm $(INIT_DIR)/$(DEFAULT_INIT).scm | $(BUILD)
-	@mkdir -p $(BUILD)/tmp_programs_default; \
+$(FSIMG): $(MKFS) $(FS_DIR)/boot.scm $(FS_DIR)/fs.scm | $(BUILD)
+	@if [ -z "$(INIT)" ]; then \
+		echo "error: INIT not set (example: make run INIT=closure)"; \
+		exit 1; \
+	fi; \
+	mkdir -p $(BUILD)/tmp_programs_default; \
 	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_default/boot.scm; \
-	cp $(INIT_DIR)/$(DEFAULT_INIT).scm $(BUILD)/tmp_programs_default/init.scm; \
+	cp $(FS_DIR)/fs.scm $(BUILD)/tmp_programs_default/fs.scm; \
+	cp $(INIT_DIR)/$(INIT).scm $(BUILD)/tmp_programs_default/init.scm; \
 	python3 $(MKFS) $(BUILD)/tmp_programs_default $@
 
 $(STAGE2): $(ASM_STAGE2) $(KERNEL_BIN) $(FSIMG) | $(BUILD)
@@ -116,9 +119,10 @@ run-echo: $(BUILD)/os_echo.img
 	sys.stdout.flush()
 	PY
 
-$(BUILD)/fs_%.img: $(MKFS) $(FS_DIR)/boot.scm $(INIT_DIR)/%.scm | $(BUILD)
+$(BUILD)/fs_%.img: $(MKFS) $(FS_DIR)/boot.scm $(FS_DIR)/fs.scm $(INIT_DIR)/%.scm | $(BUILD)
 	@mkdir -p $(BUILD)/tmp_programs_$*; \
 	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_$*/boot.scm; \
+	cp $(FS_DIR)/fs.scm $(BUILD)/tmp_programs_$*/fs.scm; \
 	cp $(INIT_DIR)/$*.scm $(BUILD)/tmp_programs_$*/init.scm; \
 	python3 $(MKFS) $(BUILD)/tmp_programs_$* $@
 
