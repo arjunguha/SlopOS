@@ -230,6 +230,8 @@ void kmain(void) {
 
     thread_init();
     pic_remap();
+    outb(0x21, 0xFE);
+    outb(0xA1, 0xFF);
     idt_init();
     pit_init(100);
     __asm__ volatile ("sti");

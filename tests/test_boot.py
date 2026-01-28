@@ -78,6 +78,14 @@ def _read_file_from_fs(img_path: Path, filename: str) -> str:
     raise AssertionError(f"missing file {filename} in {img_path}")
 
 
+def test_create_file_fixed_persists():
+    out = run_init(ROOT / "init_scripts" / "write_fixed.scm", snapshot=False)
+    assert "SlopOS booting..." in out
+    fs_img = ROOT / "build" / "test_write_fixed_fs.img"
+    contents = _read_file_from_fs(fs_img, "fixed.txt")
+    assert contents == "fixed content"
+
+
 def test_create_file_persists():
     out = run_init(ROOT / "init_scripts" / "write_in.scm", "Slopcoder 2000\n", snapshot=False)
     assert "SlopOS booting..." in out

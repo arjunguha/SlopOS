@@ -151,7 +151,10 @@
   (define (bind name value rest) (cons (cons name value) rest))
 
   ; Allowed bindings for init scripts; eval-scoped restricts the environment.
-  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'eval-string eval-string (bind 'read-text-file read-text-file '()))))))))))))))))))))))))))))))))))
+  (define (not x) (eq? x #f))
+  (define (> a b) (< b a))
+
+  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '> > (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'not not (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'eval-string eval-string (bind 'read-text-file read-text-file '()))))))))))))))))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)
