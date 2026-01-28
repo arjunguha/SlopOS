@@ -1,5 +1,7 @@
 # SlopOS
 
+![screencast](screencast.gif)
+
 ## Introduction
 
 We now have two examples of agent-written web browsers. I don't think I'm
