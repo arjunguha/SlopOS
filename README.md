@@ -1,9 +1,9 @@
 # slopos
 
-Tiny BIOS/MBR bootloader with a two-stage loader. Stage 2 loads a freestanding
-32-bit C kernel, probes the E820 memory map, switches to protected mode, and
-prints a simple test harness over a basic console (serial + VGA). The kernel
-prints from C, runs a tiny R5RS-ish Scheme interpreter, and then powers off.
+A small 32-bit OS built around a Scheme kernel. It boots via BIOS/MBR with a
+two-stage loader, switches to protected mode, and runs a freestanding C kernel
+that hosts a compact R5RS-ish Scheme interpreter. Most kernel logic lives in
+Scheme, including a flat filesystem and a simple interactive shell.
 
 ## Packages (Ubuntu)
 
@@ -60,15 +60,26 @@ To build images for every init script:
 make images
 ```
 
-Expected output:
+The default run prints a simple boot banner and then executes the selected
+Scheme init program. QEMU powers off automatically when the Scheme runtime
+finishes.
 
-```
-Hello from C!
-factorial(5) = 120
-120
+To run the shell init directly:
+
+```bash
+make run-init NAME=shell
 ```
 
-QEMU powers off automatically after the output.
+To build a shell image and print the QEMU command:
+
+```bash
+./make-slopos.sh out_dir
+```
+
+The shell supports `ls`, `cat <file>`, `exec <file>`, and `create <file>`
+(terminate file input by typing `EOF` on its own line), plus `help`.
+`programs/` includes a sample `factorial.scm` you can run from the shell with
+`exec factorial.scm`.
 
 ## Flat filesystem image
 
@@ -79,12 +90,13 @@ python3 scripts/mkfs.py programs build/fs.img
 ```
 
 `boot.scm` is read from a fixed location at the start of the image. It defines
-filesystem helpers and then loads `init.scm` from the flat filesystem region.
+filesystem helpers (from `fs.scm`) and then loads `init.scm` from the flat
+filesystem region.
 
 ## Init scripts
 
 Init programs live in `init_scripts/`. The default image uses
-`init_scripts/default.scm`.
+`init_scripts/default.scm`. The shell lives in `init_scripts/shell.scm`.
 
 ### Boot + filesystem image layout
 
@@ -133,3 +145,19 @@ as a second argument:
 ```bash
 ./build/scheme-host path/to/program.scm build/fs.img
 ```
+
+## Tests
+
+Run all tests:
+
+```bash
+uv run pytest -q
+```
+
+Run a single init script in QEMU (builds a fresh image each time):
+
+```bash
+./test.sh init_scripts/closure.scm
+```
+
+Shell tests use a Python harness that drives QEMU with scripted input.

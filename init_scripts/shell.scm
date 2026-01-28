@@ -116,6 +116,15 @@
 (define (cmd-create name)
   (create-loop name '()))
 
+(define (cmd-help)
+  (display "commands:") (newline)
+  (display "  ls") (newline)
+  (display "  cat <file>") (newline)
+  (display "  exec <file>") (newline)
+  (display "  create <file>  (end input with EOF on its own line)") (newline)
+  (display "  help") (newline)
+  (display "  exit") (newline))
+
 (define (readline)
   (define (erase)
     (display bs)
@@ -168,9 +177,11 @@
               (begin (cmd-exec arg) #t)
               (if (string=? cmd "create")
                   (begin (cmd-create arg) #t)
-                  (if (string=? cmd "exit")
-                      #f
-                      (begin (display "unknown command") (newline) #t)))))))
+                  (if (string=? cmd "help")
+                      (begin (cmd-help) #t)
+                      (if (string=? cmd "exit")
+                          #f
+                          (begin (display "unknown command") (newline) #t))))))))
 
 (define (repl)
   (display "> ")

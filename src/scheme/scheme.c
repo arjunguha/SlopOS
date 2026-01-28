@@ -166,6 +166,36 @@ static Cell *make_string_len(Scheme *sc, const char *data, size_t len) {
     return c;
 }
 
+static Cell *make_string_from_int(Scheme *sc, int n) {
+    char tmp[12];
+    size_t len = 0;
+    unsigned int u = (unsigned int)n;
+    if (n == 0) {
+        tmp[len++] = '0';
+    } else {
+        if (n < 0) {
+            u = (unsigned int)(-n);
+        }
+        while (u > 0 && len < sizeof(tmp)) {
+            tmp[len++] = (char)('0' + (u % 10));
+            u /= 10;
+        }
+        if (n < 0 && len < sizeof(tmp)) {
+            tmp[len++] = '-';
+        }
+    }
+    char *buf = alloc_str_bytes(sc, len);
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = tmp[len - 1 - i];
+    }
+    buf[len] = '\0';
+    Cell *c = alloc_cell(sc);
+    c->type = T_STRING;
+    c->as.str.data = buf;
+    c->as.str.len = len;
+    return c;
+}
+
 static Cell *cons(Scheme *sc, Cell *a, Cell *d) {
     Cell *c = alloc_cell(sc);
     c->type = T_PAIR;
@@ -314,9 +344,10 @@ static Cell *read_list(Scheme *sc, const char **s) {
         skip_ws(s);
     }
 
-    if (**s == ')') {
-        (*s)++;
+    if (**s != ')') {
+        panic(sc, "unterminated list");
     }
+    (*s)++;
 
     return head ? head : scheme_nil(sc);
 }
@@ -359,9 +390,10 @@ static Cell *read_string(Scheme *sc, const char **s) {
         (*s)++;
         len++;
     }
-    if (**s == '"') {
-        (*s)++;
+    if (**s != '"') {
+        panic(sc, "unterminated string literal");
     }
+    (*s)++;
     return make_string_len(sc, start, len);
 }
 
@@ -376,6 +408,9 @@ static Cell *read_expr(Scheme *sc, const char **s) {
     if (**s == '(') {
         (*s)++;
         return read_list(sc, s);
+    }
+    if (**s == ')') {
+        panic(sc, "unexpected )");
     }
     if (**s == '\'') {
         (*s)++;
@@ -1077,6 +1112,14 @@ static Cell *prim_display(Scheme *sc, Cell *args) {
     return scheme_nil(sc);
 }
 
+static Cell *prim_number_to_string(Scheme *sc, Cell *args) {
+    Cell *v = car(args);
+    if (v->type != T_INT) {
+        panic(sc, "number->string: expected int");
+    }
+    return make_string_from_int(sc, v->as.i);
+}
+
 static Cell *prim_newline(Scheme *sc, Cell *args) {
     (void)args;
     putc_out(sc, '\n');
@@ -1187,6 +1230,7 @@ void scheme_init(Scheme *sc, const SchemeConfig *cfg) {
     add_prim(sc, "yield", prim_yield);
     add_prim(sc, "display", prim_display);
     add_prim(sc, "newline", prim_newline);
+    add_prim(sc, "number->string", prim_number_to_string);
     add_prim(sc, "foreign-call", prim_foreign_call);
 }
 
@@ -1206,6 +1250,10 @@ static int eval_string_in_env(Scheme *sc, const char *input, Cell *env) {
         eval(sc, expr, env);
         pop_roots(sc, 1);
         count++;
+    }
+    skip_ws(&p);
+    if (*p != '\0') {
+        panic(sc, "trailing garbage after last expression");
     }
     return count;
 }

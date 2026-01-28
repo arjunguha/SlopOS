@@ -107,6 +107,7 @@ def test_list_files():
     assert "SlopOS booting..." in out
     assert "fs.scm" in out
     assert "init.scm" in out
+    assert "factorial.scm" in out
 
 
 def test_shell_create_two_files():

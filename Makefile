@@ -79,8 +79,7 @@ $(FSIMG): $(MKFS) $(FS_DIR)/boot.scm $(FS_DIR)/fs.scm | $(BUILD)
 		exit 1; \
 	fi; \
 	mkdir -p $(BUILD)/tmp_programs_default; \
-	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_default/boot.scm; \
-	cp $(FS_DIR)/fs.scm $(BUILD)/tmp_programs_default/fs.scm; \
+	cp $(FS_DIR)/*.scm $(BUILD)/tmp_programs_default/; \
 	cp $(INIT_DIR)/$(INIT).scm $(BUILD)/tmp_programs_default/init.scm; \
 	python3 $(MKFS) $(BUILD)/tmp_programs_default $@
 
@@ -130,8 +129,7 @@ run-echo: $(BUILD)/os_echo.img
 
 $(BUILD)/fs_%.img: $(MKFS) $(FS_DIR)/boot.scm $(FS_DIR)/fs.scm $(INIT_DIR)/%.scm | $(BUILD)
 	@mkdir -p $(BUILD)/tmp_programs_$*; \
-	cp $(FS_DIR)/boot.scm $(BUILD)/tmp_programs_$*/boot.scm; \
-	cp $(FS_DIR)/fs.scm $(BUILD)/tmp_programs_$*/fs.scm; \
+	cp $(FS_DIR)/*.scm $(BUILD)/tmp_programs_$*/; \
 	cp $(INIT_DIR)/$*.scm $(BUILD)/tmp_programs_$*/init.scm; \
 	python3 $(MKFS) $(BUILD)/tmp_programs_$* $@
 

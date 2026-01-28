@@ -36,11 +36,13 @@ def test_shell_ls_lists_core_files():
         Send("ls\n"),
         Expect("fs.scm"),
         Expect("init.scm"),
+        Expect("factorial.scm"),
         Send("exit\n"),
     ]
     out = run_shell_steps(steps, timeout=10)
     assert "fs.scm" in out
     assert "init.scm" in out
+    assert "factorial.scm" in out
 
 
 def test_shell_cat_missing_file():
@@ -186,6 +188,22 @@ def test_shell_unknown_command():
     ]
     out = run_shell_steps(steps, timeout=10)
     assert "unknown command" in out
+
+
+def test_shell_help_lists_commands():
+    steps = [
+        prompt(),
+        Send("help\n"),
+        Expect("commands:"),
+        Expect("create <file>"),
+        Expect("exec <file>"),
+        Expect("cat <file>"),
+        Expect("ls"),
+        Expect("exit"),
+        Send("exit\n"),
+    ]
+    out = run_shell_steps(steps, timeout=10)
+    assert "commands:" in out
 
 
 def test_shell_define_and_display():
