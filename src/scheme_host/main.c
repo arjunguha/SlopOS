@@ -13,6 +13,11 @@ static void host_panic(const char *msg) {
     exit(1);
 }
 
+static int host_read_char(void *user) {
+    (void)user;
+    return getchar();
+}
+
 static int host_foreign_call(const char *name, int argc, const int *argv) {
     if (strcmp(name, "putc") == 0) {
         if (argc >= 1) {
@@ -133,6 +138,7 @@ int main(int argc, char **argv) {
     cfg.platform.foreign_call = host_foreign_call;
     cfg.platform.read_byte = host_read_byte;
     cfg.platform.disk_size = host_disk_size;
+    cfg.platform.read_char = host_read_char;
 
     scheme_init(&sc, &cfg);
     scheme_eval_string(&sc, input ? input : default_program);

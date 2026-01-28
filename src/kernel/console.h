@@ -5,5 +5,7 @@ void console_init(void);
 void console_putc(char c);
 void console_write(const char *s);
 void console_write_dec(unsigned int value);
+int console_has_input(void);
+char console_getc(void);
 
 #endif

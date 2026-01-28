@@ -58,32 +58,34 @@
               (loop (cons ch acc)))))
     (loop '()))
 
+  (define (bind name value rest) (cons (cons name value) rest))
+
   ; Allowed bindings for init scripts; eval-scoped restricts the environment.
   (define allowed
-    (cons (cons 'display display)
-      (cons (cons 'newline newline)
-        (cons (cons '+ +)
-          (cons (cons '- -)
-            (cons (cons '* *)
-              (cons (cons '< <)
-                (cons (cons '= =)
-                  (cons (cons 'cons cons)
-                    (cons (cons 'car car)
-                      (cons (cons 'cdr cdr)
-                        (cons (cons 'null? null?)
-                          (cons (cons 'pair? pair?)
-                            (cons (cons 'eq? eq?)
-                              (cons (cons 'string-length string-length)
-                                (cons (cons 'string-ref string-ref)
-                                  (cons (cons 'string=? string=?)
-                                    (cons (cons 'char=? char=?)
-                                      (cons (cons 'list-alloc list-alloc)
-                                      (cons (cons 'list->string list->string)
-                                        (cons (cons 'read-char read-char)
-                                          (cons (cons 'read-string read-string)
-                                            (cons (cons 'eval-string eval-string)
-                                              (cons (cons 'read-text-file read-text-file)
-                                                '())))))))))))))))))))))))
+    (bind 'display display
+      (bind 'newline newline
+        (bind '+ +
+          (bind '- -
+            (bind '* *
+              (bind '< <
+                (bind '= =
+                  (bind 'cons cons
+                    (bind 'car car
+                      (bind 'cdr cdr
+                        (bind 'null? null?
+                          (bind 'pair? pair?
+                            (bind 'eq? eq?
+                              (bind 'string-length string-length
+                                (bind 'string-ref string-ref
+                                  (bind 'string=? string=?
+                                    (bind 'char=? char=?
+                                      (bind 'list-alloc list-alloc
+                                        (bind 'list->string list->string
+                                          (bind 'read-char read-char
+                                            (bind 'read-string read-string
+                                              (bind 'eval-string eval-string
+                                                (bind 'read-text-file read-text-file
+                                                  '()))))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)

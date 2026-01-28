@@ -29,7 +29,7 @@ OBJCOPY := $(CROSS)objcopy
 CFLAGS := -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -m32 -O2 -Wall -Wextra -nostdlib -nostdinc -DSCHEME_NO_STDLIB -I src/kernel -I src
 LDFLAGS := -T linker.ld
 
-.PHONY: all run clean
+.PHONY: all run run-echo clean
 
 all: $(IMG)
 
@@ -106,6 +106,15 @@ $(IMG): $(STAGE1) $(STAGE2) $(KERNEL_BIN) $(FSIMG) | $(BUILD)
 
 run: $(IMG)
 	$(QEMU) -drive if=floppy,format=raw,file=$(IMG) -display none -serial stdio -monitor none
+
+run-echo: $(BUILD)/os_echo.img
+	@python3 - <<-'PY' | $(QEMU) -drive if=floppy,format=raw,file=$(BUILD)/os_echo.img -display none -serial stdio -monitor none
+	import sys
+	import time
+	time.sleep(0.2)
+	sys.stdout.write("Slopcoder 2000\n")
+	sys.stdout.flush()
+	PY
 
 $(BUILD)/fs_%.img: $(MKFS) $(FS_DIR)/boot.scm $(INIT_DIR)/%.scm | $(BUILD)
 	@mkdir -p $(BUILD)/tmp_programs_$*; \

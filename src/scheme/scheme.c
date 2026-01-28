@@ -368,20 +368,26 @@ static Cell *read_expr(Scheme *sc, const char **s) {
         (*s)++;
         if (**s == '\\') {
             (*s)++;
-            if (streq(*s, "newline")) {
-                (*s) += 7;
-                return make_char(sc, '\n');
+            const char *start = *s;
+            size_t len = 0;
+            while (**s && !is_delim(**s)) {
+                (*s)++;
+                len++;
             }
-            if (streq(*s, "return")) {
-                (*s) += 6;
-                return make_char(sc, '\r');
-            }
-            if (**s == 0) {
+            if (len == 0) {
                 return NULL;
             }
-            char c = **s;
-            (*s)++;
-            return make_char(sc, (unsigned char)c);
+            if (len == 7 && streq_len("newline", start, len)) {
+                return make_char(sc, '\n');
+            }
+            if (len == 6 && streq_len("return", start, len)) {
+                return make_char(sc, '\r');
+            }
+            if (len == 1) {
+                return make_char(sc, (unsigned char)start[0]);
+            }
+            panic(sc, "invalid character literal");
+            return scheme_nil(sc);
         }
         if (**s == 't') {
             (*s)++;

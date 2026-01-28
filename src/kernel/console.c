@@ -19,6 +19,16 @@ static void serial_write(u8 c) {
     outb(0x3F8, c);
 }
 
+int console_has_input(void) {
+    return (inb(0x3F8 + 5) & 0x01) != 0;
+}
+
+char console_getc(void) {
+    while (!console_has_input()) {
+    }
+    return (char)inb(0x3F8);
+}
+
 void console_init(void) {
     outb(0x3F8 + 1, 0x00);
     outb(0x3F8 + 3, 0x80);
