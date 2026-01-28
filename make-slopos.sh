@@ -54,7 +54,15 @@ dd if="$BUILD_DIR/stage2.bin" of="$BOOT_IMG" bs=512 seek=1 conv=notrunc status=n
 dd if="$BUILD_DIR/kernel.bin" of="$BOOT_IMG" bs=512 seek=$kernel_lba conv=notrunc status=none
 dd if="$FS_IMG" of="$BOOT_IMG" bs=512 seek=$ramdisk_lba conv=notrunc status=none
 
+BOOT_CMD="qemu-system-i386 -drive if=floppy,format=raw,file=$(basename "$BOOT_IMG") -drive if=ide,format=raw,file=$(basename "$FS_IMG") -display none -serial stdio -monitor none"
+BOOT_SH="$OUT_DIR/boot.sh"
+cat > "$BOOT_SH" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$BOOT_CMD
+EOF
+chmod +x "$BOOT_SH"
+
 echo "Built $BOOT_IMG"
 echo "Built $FS_IMG"
-echo "Run (raw tty so Ctrl-D reaches the shell):"
-echo "stty raw -echo; qemu-system-i386 -drive if=floppy,format=raw,file=$BOOT_IMG -drive if=ide,format=raw,file=$FS_IMG -display none -serial stdio -monitor none; stty sane"
+echo "Run: $BOOT_SH"
