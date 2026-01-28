@@ -1,4 +1,90 @@
-# slopos
+# SlopOS
+
+## Introduction
+
+We now have two examples of agent-written web browsers. I don't think I'm
+skilled enough to guide an agent through writing a web browser, so I thought
+I'd try something easier. Here is SlopOS, an operating system written by
+GPT Codex 5.2 Medium, with some light guidance from me.
+
+SlopOS is a glimpse of the future of operating systems. It leapfrogs the
+ossified POSIX standard and C programming language. It goes beyond today's
+timid attempts to use Rust in the kernel. Instead, SlopOS has a fully managed
+userland and a (mostly) managed kernel. The secret ingredient is that it's written
+in a modern, memory-safe, and latently-typed programming language: Scheme.
+
+SlopOS has a tiny C kernel that embeds a Scheme interpreter with a
+mark-and-sweep garbage collector running in ring 0. The C kernel exposes several
+low-level primitives to Scheme for I/O, and starting new interpreter instances.
+After the usual initialization, it loads the file boot.scm from the disk image.
+This file has the bulk of kernel code, such as the file system implementation in
+Scheme.
+
+A highlight of SlopOS is its advanced, object-capability based security model.
+Instead of the usual `eval` function from Scheme, SlopOS has an `eval-scoped`
+function that restricts the set of primitive functions available to the callee.
+You can see this in action in fs.scm, which explicitly lists every primitive
+function that is available to userland. You can think of this as containers 2.0:
+we don't need containers, and this makes the world a better place. Trust me, I
+was there before containers.
+
+SlopOS has some other unusual features:
+
+1. It does not support networking yet. This could be considered a feature
+   for safety-critical systems.
+
+2. It currently requires programs to explicitly yield. This is similar to
+   Windows 3.1, which was a great operating system. I've heard this is how
+   some real-time operating systems work, but I don't really know anything about
+   those.
+
+3. The SlopOS filesystem optimizes the layout of files on disk to optimize
+   seek times. No matter how large the file, SlopOS optimizes it to be stored as
+   contiguous blocks. However, this means that you need to periodically, perhaps
+   frequently, defragment the disk.
+
+4. The SlopOS filesystem does not support directories. Instead, all files are in
+   a single top-level directory. But organizing files is for old people. Think
+   of this as a modern, Gen-Z filesystem.
+
+All things considered, SlopOS is the ideal platform to build
+non-networked, real-time, safety-critical systems such as Battlestar
+Galactica.
+
+## How It Actually Went
+
+In any good operating systems course, you build your own operating system.
+Although I didn't formally study OS, I've always been interested in systems, and
+I tried to remedy this by working through Tanenbaum's textbook. I don't remember
+how far I got, but I distinctly recall struggling over the minutiae of the boot
+loader, which was the first thing that Codex struggled with for several minutes.
+
+Codex also spent a lot of time debugging the garbage collector, which is also
+very familiar to me. I am not completely confident it is entirely correct. On
+the last GC bug that it found, I think it worked it around it by restructuring
+the program instead of truly fixing the bug. It also took some guidance from me,
+and a lot of trial and error by Codex, to make the operating system testable.
+You'll see that there are several different init scripts, most of which don't
+start the shell, so that the agent can get appropriate feedback from inscrutible
+bugs Finally, Codex wrote itself a little Python script to check that it had
+properly balanced parentheses in Scheme code. It used it several times to check
+the Scheme that it wrote, which I found hilarious.
+
+There are lots of ways to push this further. The C kernel is not as minimal as
+it should be. For example, we shouldn't need C to implement cooperative
+multitasking. I suspect the Scheme interpreter doesn't do proper tail calls,
+which is embaressing. It certainly doesn't do bignums, but I've cared about
+those. I'm confident that any frontier model could do all of these, and much
+more, if asked to do the right thing.
+
+I get a lot of leverage out of Cursor, Claude Code, and Codex in both teaching
+and research. But SlopOS is something different—a peculiar form of creative
+coding where I'm happy to let the model make decisions I don't review. That's
+fun for a toy OS. It's not how I'd build anything that matters. At least, not
+yet.
+
+
+**The rest of the README is whatever the model generated for itself.**
 
 A small 32-bit OS built around a Scheme kernel. It boots via BIOS/MBR with a
 two-stage loader, switches to protected mode, and runs a freestanding C kernel
