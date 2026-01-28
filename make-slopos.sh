@@ -26,8 +26,7 @@ TMP_DIR="$BUILD_DIR/tmp_programs_shell"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
-cp "$ROOT_DIR/programs/boot.scm" "$TMP_DIR/boot.scm"
-cp "$ROOT_DIR/programs/fs.scm" "$TMP_DIR/fs.scm"
+cp "$ROOT_DIR/programs/"*.scm "$TMP_DIR/"
 cp "$ROOT_DIR/init_scripts/shell.scm" "$TMP_DIR/init.scm"
 
 FS_IMG="$OUT_DIR/fs_shell.img"
