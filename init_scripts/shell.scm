@@ -1,0 +1,158 @@
+(define (eof? ch) (char=? ch (int->char 4)))
+(define bs (int->char 8))
+(define del (int->char 127))
+(define (or a b) (if a a b))
+
+(define (read-all)
+  (define (loop acc)
+    (define ch (read-char))
+    (if (eof? ch)
+        (list->string (reverse-list acc))
+        (loop (cons ch acc))))
+  (loop '()))
+
+(define space (int->char 32))
+(define newline-ch (int->char 10))
+
+(define (append a b)
+  (if (null? a)
+      b
+      (cons (car a) (append (cdr a) b))))
+
+(define (string->revlist s)
+  (define (loop i acc)
+    (if (< i 0)
+        acc
+        (loop (- i 1) (cons (string-ref s i) acc))))
+  (loop (- (string-length s) 1) '()))
+
+(define (string-trim-left s)
+  (define (loop i)
+    (if (< i (string-length s))
+        (if (char=? (string-ref s i) space)
+            (loop (+ i 1))
+            i)
+        i))
+  (loop 0))
+
+(define (string-trim-right s)
+  (define (loop i)
+    (if (< i 0)
+        -1
+        (if (char=? (string-ref s i) space)
+            (loop (- i 1))
+            i)))
+  (loop (- (string-length s) 1)))
+
+(define (string-trim s)
+  (define start (string-trim-left s))
+  (define end (string-trim-right s))
+  (if (< end start)
+      ""
+      (begin
+        (define (slice i acc)
+          (if (> i end)
+              (list->string (reverse-list acc))
+              (slice (+ i 1) (cons (string-ref s i) acc))))
+        (slice start '()))))
+
+(define (split-first s)
+  (define (loop i)
+    (if (< i (string-length s))
+        (if (char=? (string-ref s i) space)
+            i
+            (loop (+ i 1)))
+        i))
+  (define sep (loop 0))
+  (if (= sep (string-length s))
+      (cons s (cons "" '()))
+      (begin
+        (define (take i acc)
+          (if (= i sep)
+              (list->string (reverse-list acc))
+              (take (+ i 1) (cons (string-ref s i) acc))))
+        (define (drop i acc)
+          (if (= i (string-length s))
+              (list->string (reverse-list acc))
+              (drop (+ i 1) (cons (string-ref s i) acc))))
+        (define head (take 0 '()))
+        (define tail (string-trim (drop (+ sep 1) '())))
+        (cons head (cons tail '())))))
+
+(define (print-lines xs)
+  (if (null? xs)
+      0
+      (begin (display (car xs)) (newline) (print-lines (cdr xs)))))
+
+(define (cmd-ls)
+  (print-lines (list-files)))
+
+(define (cmd-cat name)
+  (define contents (read-text-file name))
+  (if contents
+      (begin (display contents) (newline))
+      (begin (display "missing file") (newline))))
+
+(define (cmd-exec name)
+  (define contents (read-text-file name))
+  (if contents
+      (eval-string contents)
+      (begin (display "missing file") (newline))))
+
+(define (cmd-create name)
+  (define (loop acc)
+    (define line (readline))
+    (if (not line)
+        (begin
+          (create-file name (list->string (reverse-list acc)))
+          (display "ok")
+          (newline))
+        (loop (append (cons newline-ch (string->revlist line)) acc))))
+  (loop '()))
+
+(define (readline)
+  (define (erase)
+    (display bs)
+    (display (int->char 32))
+    (display bs))
+  (define (loop acc)
+    (define ch (read-char))
+    (if (eof? ch)
+        #f
+        (if (char=? ch #\newline)
+            (begin (newline) (list->string (reverse-list acc)))
+            (if (char=? ch #\return)
+                (begin (newline) (list->string (reverse-list acc)))
+                (if (or (char=? ch bs) (char=? ch del))
+                    (if (null? acc)
+                        (loop acc)
+                        (begin (erase) (loop (cdr acc))))
+                    (begin (display ch) (loop (cons ch acc))))))))
+  (loop '()))
+
+(define (dispatch cmd arg)
+  (if (string=? cmd "ls")
+      (cmd-ls)
+      (if (string=? cmd "cat")
+          (cmd-cat arg)
+          (if (string=? cmd "exec")
+              (cmd-exec arg)
+              (if (string=? cmd "create")
+                  (cmd-create arg)
+                  (begin (display "unknown command") (newline)))))))
+
+(define (repl)
+  (display "> ")
+  (define line (readline))
+  (if (not line)
+      0
+      (begin
+        (define trimmed (string-trim line))
+        (if (string=? trimmed "")
+            (repl)
+            (begin
+              (define parts (split-first trimmed))
+              (dispatch (car parts) (car (cdr parts)))
+              (repl))))))
+
+(repl)

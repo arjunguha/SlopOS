@@ -153,11 +153,13 @@
   (define (read-string)
     (define (loop acc)
       (define ch (read-char))
-      (if (char=? ch #\newline)
-          (list->string (reverse-list acc))
-          (if (char=? ch #\return)
+      (if (char=? ch (int->char 4))
+          (if (null? acc) #f (list->string (reverse-list acc)))
+          (if (char=? ch #\newline)
               (list->string (reverse-list acc))
-              (loop (cons ch acc)))))
+              (if (char=? ch #\return)
+                  (list->string (reverse-list acc))
+                  (loop (cons ch acc))))))
     (loop '()))
 
   (define (bind name value rest) (cons (cons name value) rest))
@@ -166,7 +168,7 @@
   (define (not x) (eq? x #f))
   (define (> a b) (< b a))
 
-  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '> > (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'not not (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'list-files list-files (bind 'eval-string eval-string (bind 'read-text-file read-text-file '())))))))))))))))))))))))))))))))))))
+  (define allowed (bind 'display display (bind 'newline newline (bind '+ + (bind '- - (bind '* * (bind '< < (bind '> > (bind '= = (bind 'quotient quotient (bind 'modulo modulo (bind 'cons cons (bind 'car car (bind 'cdr cdr (bind 'null? null? (bind 'pair? pair? (bind 'eq? eq? (bind 'not not (bind 'reverse-list reverse-list (bind 'string-length string-length (bind 'string-ref string-ref (bind 'string=? string=? (bind 'char=? char=? (bind 'char->int char->int (bind 'int->char int->char (bind 'list-alloc list-alloc (bind 'list->string list->string (bind 'read-char read-char (bind 'read-string read-string (bind 'spawn-thread spawn-thread (bind 'yield yield (bind 'disk-write-bytes disk-write-bytes (bind 'disk-size disk-size (bind 'create-file create-file (bind 'delete-file delete-file (bind 'list-files list-files (bind 'eval-string eval-string (bind 'read-text-file read-text-file '()))))))))))))))))))))))))))))))))))))
 
   ; Eval a Scheme file by name with the restricted environment.
   (define (load name)
